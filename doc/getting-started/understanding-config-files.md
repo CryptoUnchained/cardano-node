@@ -45,33 +45,25 @@ A minimal version of this file looks like this:
 
 ```json
 {
-  "LocalRoots": {
-    "groups": [
-      {
-        "localRoots": {
-          "accessPoints": [
+  "localRoots": [
+      { "accessPoints": [
             {
               "address": "x.x.x.x",
               "port": 3001
             }
           ],
-          "advertise": false
-        },
+        "advertise": false,
         "valency": 1
       }
-    ]
-  },
-  "PublicRoots": [
-    {
-      "publicRoots" : {
-        "accessPoints": [
-          {
-            "address": "y.y.y.y",
-            "port": 3002
-          }
+  ],
+  "publicRoots": [
+    { "accessPoints": [
+        {
+          "address": "y.y.y.y",
+          "port": 3002
+        }
         ],
-        "advertise": false
-      }
+      "advertise": false
     }
   ],
   "useLedgerAfterSlot": 0
@@ -101,6 +93,9 @@ You __can__ tell the node that the topology configuration file changed by sendin
 signal to the `cardano-node` process, e.g. `pkill -HUP cardano-node`. After receiving the
 signal, `cardano-node` will re-read the file and restart all dns resolution. Please
 **note** that this only applies to the topology configuration file!
+
+One can disable ledger peers by setting the `useLedgerAfterSlot` to a negative
+value.
 
 #### The genesis.json file
 

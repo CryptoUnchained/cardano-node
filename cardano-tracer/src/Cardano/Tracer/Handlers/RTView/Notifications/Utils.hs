@@ -24,46 +24,34 @@ import           Cardano.Tracer.Handlers.RTView.Update.Utils
 import           Cardano.Tracer.Types
 
 initEventsQueues
-  :: ConnectedNodesNames
+  :: Maybe FilePath
+  -> ConnectedNodesNames
   -> DataPointRequestors
   -> Lock
   -> IO EventsQueues
-initEventsQueues nodesNames dpReqs curDPLock = do
-  lastTime <- newTVarIO nullTime
+initEventsQueues rtvSD nodesNames dpReqs curDPLock = do
+  emailSettings <- readSavedEmailSettings rtvSD
 
-  warnQ <- initEventsQueue
-  errsQ <- initEventsQueue
-  critQ <- initEventsQueue
-  alrtQ <- initEventsQueue
-  emrgQ <- initEventsQueue
-  nodeDisconQ <- initEventsQueue
+  newTVarIO . M.fromList =<<
+    if incompleteEmailSettings emailSettings
+    then pure []
+    else do
+      lastTime <- newTVarIO nullTime
+      let mkEventQueue ident (evsS, evsP) = do
+            evsQ <- newTBQueueIO 2000
+            evsT <- mkTimer
+              (makeAndSendNotification emailSettings nodesNames dpReqs curDPLock lastTime evsQ) evsS evsP
+            pure (ident, (evsQ, evsT))
 
-  settings <- readSavedEventsSettings
-  let (warnS, warnP) = evsWarnings settings
-      (errsS, errsP) = evsErrors settings
-      (critS, critP) = evsCriticals settings
-      (alrtS, alrtP) = evsAlerts settings
-      (emrgS, emrgP) = evsEmergencies settings
-      (nodeDisconS, nodeDisconP) = evsNodeDisconnected settings
-
-  warnT <- mkTimer (makeAndSendNotification nodesNames dpReqs curDPLock lastTime warnQ) warnS warnP
-  errsT <- mkTimer (makeAndSendNotification nodesNames dpReqs curDPLock lastTime errsQ) errsS errsP
-  critT <- mkTimer (makeAndSendNotification nodesNames dpReqs curDPLock lastTime critQ) critS critP
-  alrtT <- mkTimer (makeAndSendNotification nodesNames dpReqs curDPLock lastTime alrtQ) alrtS alrtP
-  emrgT <- mkTimer (makeAndSendNotification nodesNames dpReqs curDPLock lastTime emrgQ) emrgS emrgP
-  nodeDisconT <- mkTimer (makeAndSendNotification nodesNames dpReqs curDPLock lastTime nodeDisconQ)
-                         nodeDisconS nodeDisconP
-
-  newTVarIO $ M.fromList
-    [ (EventWarnings,         (warnQ, warnT))
-    , (EventErrors,           (errsQ, errsT))
-    , (EventCriticals,        (critQ, critT))
-    , (EventAlerts,           (alrtQ, alrtT))
-    , (EventEmergencies,      (emrgQ, emrgT))
-    , (EventNodeDisconnected, (nodeDisconQ, nodeDisconT))
-    ]
- where
-  initEventsQueue = newTBQueueIO 2000
+      settings <- readSavedEventsSettings rtvSD
+      mapM (uncurry mkEventQueue)
+        [ (EventWarnings,         evsWarnings    settings)
+        , (EventErrors,           evsErrors      settings)
+        , (EventCriticals,        evsCriticals   settings)
+        , (EventAlerts,           evsAlerts      settings)
+        , (EventEmergencies,      evsEmergencies settings)
+        , (EventNodeDisconnected, evsNodeDisconnected settings)
+        ]
 
 getNewEvents
   :: EventsQueues

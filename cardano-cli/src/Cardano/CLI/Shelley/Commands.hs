@@ -190,7 +190,6 @@ data TransactionCmd
       [MetadataFile]
       (Maybe ProtocolParamsSourceSpec)
       (Maybe UpdateProposalFile)
-      OutputSerialisation
       TxBodyFile
 
     -- | Like 'TxBuildRaw' but without the fee, and with a change output.
@@ -202,11 +201,11 @@ data TransactionCmd
       (Maybe Word)
       -- ^ Override the required number of tx witnesses
       [(TxIn, Maybe (ScriptWitnessFiles WitCtxTxIn))]
-      -- ^ Read only reference inputs
-      [TxIn]
-      -- ^ Required signers
-      [RequiredSigner]
       -- ^ Transaction inputs with optional spending scripts
+      [TxIn]
+      -- ^ Read only reference inputs
+      [RequiredSigner]
+      -- ^ Required signers
       [TxIn]
       -- ^ Transaction inputs for collateral, only key witnesses, no scripts.
       (Maybe TxOutAnyEra)
@@ -233,7 +232,6 @@ data TransactionCmd
       [MetadataFile]
       (Maybe ProtocolParamsSourceSpec)
       (Maybe UpdateProposalFile)
-      OutputSerialisation
       TxBuildOutputOptions
   | TxSign InputTxBodyOrTxFile [WitnessSigningData] (Maybe NetworkId) TxFile
   | TxCreateWitness TxBodyFile WitnessSigningData (Maybe NetworkId) OutputFile
@@ -373,6 +371,7 @@ data QueryCmd =
       -- ^ Node operational certificate
       (Maybe OutputFile)
   | QueryPoolState' AnyConsensusModeParams NetworkId [Hash StakePoolKey]
+  | QueryTxMempool AnyConsensusModeParams NetworkId TxMempoolQuery (Maybe OutputFile)
   deriving Show
 
 renderQueryCmd :: QueryCmd -> Text
@@ -390,6 +389,14 @@ renderQueryCmd cmd =
     QueryStakeSnapshot' {} -> "query stake-snapshot"
     QueryKesPeriodInfo {} -> "query kes-period-info"
     QueryPoolState' {} -> "query pool-state"
+    QueryTxMempool _ _ query _ -> "query tx-mempool" <> renderTxMempoolQuery query
+  where
+    renderTxMempoolQuery query =
+      case query of
+        TxMempoolQueryTxExists tx -> "tx-exists " <> serialiseToRawBytesHexText tx
+        TxMempoolQueryNextTx -> "next-tx"
+        TxMempoolQueryInfo -> "info"
+
 
 data GovernanceCmd
   = GovernanceMIRPayStakeAddressesCertificate

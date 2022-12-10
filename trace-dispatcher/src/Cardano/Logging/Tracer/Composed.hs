@@ -9,7 +9,7 @@ module Cardano.Logging.Tracer.Composed (
   , documentTracer
   ) where
 
-import           Control.Exception (catch, SomeException)
+import           Control.Exception (SomeException, catch)
 import           Data.Aeson.Types (ToJSON)
 import           Data.Maybe (fromMaybe)
 import           Data.Text
@@ -24,6 +24,7 @@ import           Cardano.Logging.Trace
 import           Cardano.Logging.Types
 
 import qualified Control.Tracer as NT
+import qualified Data.List as L
 
 data MessageOrLimit m = Message m | Limit LimitingMessage
 
@@ -71,9 +72,9 @@ mkCardanoTracer' :: forall evt evt1.
   -> Trace IO FormattedMessage
   -> Maybe (Trace IO FormattedMessage)
   -> [Text]
-  -> (evt -> [Text])
-  -> (evt -> SeverityS)
-  -> (evt -> Privacy)
+  -> (evt1 -> [Text])
+  -> (evt1 -> SeverityS)
+  -> (evt1 -> Privacy)
   -> (Trace IO evt1 -> IO (Trace IO evt))
   -> IO (Trace IO evt)
 mkCardanoTracer' trStdout trForward mbTrEkg tracerName namesFor severityFor privacyFor
@@ -82,17 +83,17 @@ mkCardanoTracer' trStdout trForward mbTrEkg tracerName namesFor severityFor priv
     messageTrace'  <- withLimitersFromConfig
                           (NT.contramap Message messageTrace)
                           (NT.contramap Limit messageTrace)
-    messageTrace'' <- hook messageTrace'
-    messageTrace''' <- addContextAndFilter messageTrace''
+    messageTrace'' <- addContextAndFilter messageTrace'
     let metricsTrace = case mbTrEkg of
                           Nothing -> Trace NT.nullTracer
                           Just ekgTrace -> metricsFormatter "Cardano" ekgTrace
     let metricsTrace' = filterTrace (\(_,v) -> asMetrics v /= []) metricsTrace
-    metricsTrace'' <- hook metricsTrace'
-    pure $ messageTrace''' <> metricsTrace''
+    let hookedTrace = messageTrace'' <> metricsTrace'
+    hook hookedTrace
+
 
   where
-    addContextAndFilter :: Trace IO evt -> IO (Trace IO evt)
+    addContextAndFilter :: Trace IO evt1 -> IO (Trace IO evt1)
     addContextAndFilter tr = do
       tr'  <- withDetailsFromConfig tr
       tr'' <- filterSeverityFromConfig tr'
@@ -111,17 +112,17 @@ mkCardanoTracer' trStdout trForward mbTrEkg tracerName namesFor severityFor priv
                       [EKGBackend, Forwarder, Stdout HumanFormatColoured]
                       mbBackends
       in do
-        mbForwardTrace <- if Forwarder `elem` backends'
+        mbForwardTrace <- if Forwarder `L.elem` backends'
                             then fmap (Just . filterTraceByPrivacy (Just Public))
                                   (forwardFormatter Nothing trForward)
                             else pure Nothing
-        mbStdoutTrace  <-  if Stdout HumanFormatColoured `elem` backends'
+        mbStdoutTrace  <-  if Stdout HumanFormatColoured `L.elem` backends'
                             then fmap Just
                                 (humanFormatter True Nothing trStdout)
-                            else if Stdout HumanFormatUncoloured `elem` backends'
+                            else if Stdout HumanFormatUncoloured `L.elem` backends'
                               then fmap Just
                                   (humanFormatter False Nothing trStdout)
-                              else if Stdout MachineFormat `elem` backends'
+                              else if Stdout MachineFormat `L.elem` backends'
                                 then fmap Just
                                   (machineFormatter Nothing trStdout)
                                 else pure Nothing

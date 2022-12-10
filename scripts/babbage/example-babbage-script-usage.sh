@@ -15,14 +15,13 @@ export UTXO_SKEY="${UTXO_SKEY:-example/utxo-keys/utxo1.skey}"
 export RESULT_FILE="${RESULT_FILE:-$WORK/result.out}"
 
 echo "Socket path: $CARDANO_NODE_SOCKET_PATH"
-echo "Socket path: $(pwd)"
 
 ls -al "$CARDANO_NODE_SOCKET_PATH"
 
 plutusspendingscript="$BASE/scripts/plutus/scripts/v2/required-redeemer.plutus"
 plutusmintingscript="$BASE/scripts/plutus/scripts/v2/minting-script.plutus"
 plutusstakescript="scripts/plutus/scripts/v2/stake-script.plutus"
-mintpolicyid=$(cardano-cli transaction policyid --script-file $plutusmintingscript)
+mintpolicyid=$($CARDANO_CLI transaction policyid --script-file $plutusmintingscript)
 ## This datum hash is the hash of the untyped 42
 scriptdatumhash="9e1199a988ba72ffd6e9c269cadb3b53b5f360ff99f112d9b2ee30c4d74ad88b"
 datumfilepath="$BASE/scripts/plutus/data/42.datum"
@@ -110,7 +109,7 @@ $CARDANO_CLI query utxo --address $plutusspendingscriptaddr --testnet-magic "$TE
 plutuslockedutxotxin=$(jq -r 'keys[0]' $WORK/plutusutxo.json)
 lovelaceatplutusspendingscriptaddr=$(jq -r ".[\"$plutuslockedutxotxin\"].value.lovelace" $WORK/plutusutxo.json)
 
-#Get read only reference input
+# Get read only reference input
 $CARDANO_CLI query utxo --address "$readonlyaddress" --cardano-mode \
   --testnet-magic "$TESTNET_MAGIC" --out-file $WORK/read-only-ref-input-utxo.json
 readonlyrefinput=$(jq -r 'keys[0]' $WORK/read-only-ref-input-utxo.json)

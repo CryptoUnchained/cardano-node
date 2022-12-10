@@ -1,14 +1,18 @@
 usage_profile() {
      usage "profile" "Cluster profile operations" <<EOF
-    list                  List profile names (json)
-    all-profiles | all    All profile contents (json)
-    compose NAME..        Create a profile composed from named profiles
-    json NAME             Get contents of either named profile, or profile JSON desc
-    describe NAME         Print a human description of a profile
-    node-specs PROFILE-NAME/JSON
-                          Print node specs JSON for the given profile and environment
-    allocate-time PROFILE-NAME/JSON
-                          Allocate time for a run of a profile
+    $(helpcmd profile-names)          List profile names (JSON)
+     $(blk names ls)
+    $(helpcmd profile-json NAME)      Get contents of either named profile, or profile JSON desc
+     $(blk json show pj)
+    $(helpcmd profile-describe NAME)
+     $(blk describe pdesc pd)       Human-readable profile overview
+
+    $(helpcmd profile-node-specs PROFILE-NAME/JSON)
+     $(blk node-specs specs)        Print node specs JSON for the given profile and environment
+    $(helpcmd allocate-time PROFILE-NAME/JSON)
+                             Allocate time for a run of a profile
+    $(helpcmd describe-timing TIMING-JSON)
+                             Explain timing allocation
 EOF
 }
 
@@ -20,23 +24,19 @@ global_profile_eras=(
     babbage
 )
 
+profile_default_op='profile-json'
+
 profile() {
-local op=${1:-show}; test $# -gt 0 && shift
+local op=${1:-$profile_default_op}; test $# -gt 0 && shift
 
 case "$op" in
-    list | names | ls )
+    profile-names | names | list | lsp )
         profile generate-all | jq 'keys'
         ;;
 
     all-profiles | generate-all | all )
         with_era_profiles '
           map (generate_all_era_profiles(.; null; null))
-          | add
-        ';;
-
-    all-profile-names | names | all-names )
-        with_era_profiles '
-          map (generate_all_era_profiles(.; null; null) | map(.name))
           | add
         ';;
 
@@ -64,7 +64,7 @@ case "$op" in
           | add
           ';;
 
-    json | show )
+    profile-json | json | show | pj )
         local usage="USAGE: wb profile $op [NAME=<current-shell-profile>"
         local name=${1:-${WB_SHELL_PROFILE:?variable unset, no profile name to use as a default.}}
 
@@ -81,7 +81,7 @@ case "$op" in
         else jq '. * $overlay[0]' <<<$json --slurpfile overlay $preset_overlay
         fi;;
 
-    describe )
+    profile-describe | describe | pdesc | pd )
         local usage="USAGE: wb profile $op NAME"
         local name=${1:?$usage}
 
@@ -114,7 +114,7 @@ case "$op" in
         else echo "$path"
         fi;;
 
-    node-specs )
+    profile-node-specs | node-specs | specs )
         local usage="USAGE: wb profile $op PROFILE-NAME/JSON"
         local profile=${1:?$usage}
 

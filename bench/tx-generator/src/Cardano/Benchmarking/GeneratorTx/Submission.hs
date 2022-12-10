@@ -4,6 +4,7 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE KindSignatures #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE NoMonomorphismRestriction #-}
@@ -18,20 +19,23 @@
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
 module Cardano.Benchmarking.GeneratorTx.Submission
-  ( SubmissionParams(..)
+  ( StreamState (..)
+  , SubmissionParams(..)
   , SubmissionThreadReport
   , TxSource
   , ReportRef
-  , walletTxSource
   , mkSubmissionSummary
   , submitThreadReport
   , submitSubmissionThreadStats
+  , txStreamSource
   ) where
 
-import           Prelude (String, error)
 import           Cardano.Prelude hiding (ByteString, atomically, retry, state, threadDelay)
+import           Prelude (String, error)
 
 import qualified Control.Concurrent.STM as STM
+
+import qualified Streaming.Prelude as Streaming
 
 import           Data.Time.Clock (NominalDiffTime, UTCTime)
 import qualified Data.Time.Clock as Clock
@@ -45,9 +49,10 @@ import           Cardano.Tracing.OrphanInstances.Shelley ()
 import           Ouroboros.Network.Protocol.TxSubmission2.Type (TokBlockingStyle (..))
 
 import           Cardano.Api
+import           Cardano.TxGenerator.Types (TPSRate, TxGenError)
 
-import           Cardano.Benchmarking.TpsThrottle
 import           Cardano.Benchmarking.LogTypes
+import           Cardano.Benchmarking.TpsThrottle
 import           Cardano.Benchmarking.Types
 
 import           Cardano.Benchmarking.GeneratorTx.SubmissionClient
@@ -110,7 +115,7 @@ mkSubmissionSummary ssThreadName startTime reportsRefs
  where
   txDiffTimeTPS :: Int -> NominalDiffTime -> TPSRate
   txDiffTimeTPS n delta =
-    TPSRate $ realToFrac $ fromIntegral n / delta
+    realToFrac $ fromIntegral n / delta
 
   threadReportTps :: SubmissionThreadReport -> TPSRate
   threadReportTps
@@ -118,26 +123,44 @@ mkSubmissionSummary ssThreadName startTime reportsRefs
       { strStats=SubmissionThreadStats{stsAcked=Ack ack}, strEndOfProtocol } =
         txDiffTimeTPS ack (Clock.diffUTCTime strEndOfProtocol startTime)
 
-walletTxSource :: forall era. WalletScript era -> TpsThrottle -> TxSource era
-walletTxSource walletScript tpsThrottle = Active $ worker walletScript
+txStreamSource :: forall era. MVar (StreamState (TxStream IO era)) -> TpsThrottle -> TxSource era
+txStreamSource streamRef tpsThrottle = Active worker
  where
-  worker :: forall m blocking . MonadIO m => WalletScript era -> TokBlockingStyle blocking -> Req -> m (TxSource era, [Tx era])
-  worker script blocking req = do
+  worker :: forall m blocking . MonadIO m => TokBlockingStyle blocking -> Req -> m (TxSource era, [Tx era])
+  worker blocking req = do
     (done, txCount) <- case blocking of
        TokBlocking -> liftIO $ consumeTxsBlocking tpsThrottle req
        TokNonBlocking -> liftIO $ consumeTxsNonBlocking tpsThrottle req
-    (txList, newScript) <- liftIO $ unFold script txCount
+    txList <- liftIO $ unFold txCount
     case done of
       Stop -> return (Exhausted, txList)
-      Next -> return (Active $ worker newScript, txList)
+      Next -> return (Active worker, txList)
 
-  unFold :: WalletScript era -> Int -> IO ([Tx era], WalletScript era)
-  unFold script 0 = return ([], script)
-  unFold script n = do
-    next <- runWalletScript script
-    case next of
-      Done -> error "unexpected WalletScript Done" --return ([], script)
-      NextTx s tx -> do
-        (l, out) <- unFold s $ pred n
-        return (tx:l, out)
-      Error err -> error err
+  unFold :: Int -> IO [Tx era]
+  unFold 0 = return []
+  unFold n = nextOnMVar streamRef >>= \case
+    -- Node2node clients buffer a number x of TXs internally (x is determined by the node.)
+    -- Therefore it is possible that the submission client requests TXs from an empty TxStream.
+    -- In other words, it is not an error to request more TXs than there are in the TxStream.
+    StreamEmpty -> return []
+    StreamError err -> error $ show err
+    StreamActive tx -> do
+      l <- unFold $ pred n
+      return $ tx:l
+
+  nextOnMVar :: MVar (StreamState (TxStream IO era)) -> IO (StreamState (Tx era))
+  nextOnMVar v = modifyMVar v $ \case
+    StreamEmpty -> return (StreamEmpty, StreamEmpty)
+    StreamError err -> return (StreamError err, StreamError err)
+    StreamActive s -> update <$> Streaming.next s
+   where
+    update :: Either () (Either TxGenError (Tx era), TxStream IO era) -> (StreamState (TxStream IO era), StreamState (Tx era))
+    update x = case x of
+      Left () -> (StreamEmpty, StreamEmpty)
+      Right (Right tx, t) -> (StreamActive t, StreamActive tx)
+      Right (Left err, _) -> (StreamError err, StreamError err)
+
+data StreamState x
+  = StreamEmpty
+  | StreamError TxGenError
+  | StreamActive x

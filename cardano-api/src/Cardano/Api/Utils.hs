@@ -1,5 +1,6 @@
-{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE CPP #-}
+{-# LANGUAGE GADTs #-}
+{-# LANGUAGE LambdaCase #-}
 
 #if !defined(mingw32_HOST_OS)
 #define UNIX
@@ -17,7 +18,9 @@ module Cardano.Api.Utils
   , note
   , parseFilePath
   , readFileBlocking
+  , renderEra
   , runParsecParser
+  , textShow
   , writeSecrets
   ) where
 
@@ -33,18 +36,20 @@ import           Data.Maybe.Strict
 import           Data.Text (Text)
 import qualified Data.Text as Text
 import           GHC.IO.Handle.FD (openFileBlocking)
+import qualified Options.Applicative as Opt
+import           System.FilePath ((</>))
+import           System.IO (IOMode (ReadMode), hClose)
 import qualified Text.Parsec as Parsec
 import qualified Text.Parsec.String as Parsec
 import qualified Text.ParserCombinators.Parsec.Error as Parsec
 import           Text.Printf (printf)
-import qualified Options.Applicative as Opt
-import           System.FilePath ((</>))
-import           System.IO (IOMode (ReadMode), hClose)
 #ifdef UNIX
 import           System.Posix.Files (ownerReadMode, setFileMode)
 #else
 import           System.Directory (emptyPermissions, readable, setPermissions)
 #endif
+
+import           Cardano.Api.Eras
 
 (?!) :: Maybe a -> e -> Either e a
 Nothing ?! e = Left e
@@ -117,3 +122,15 @@ readFileBlocking path = bracket
           else go (acc <> Builder.byteString next)
     contents <- go mempty
     pure $ LBS.toStrict $ Builder.toLazyByteString contents)
+
+textShow :: Show a => a -> Text
+textShow = Text.pack . show
+
+renderEra :: AnyCardanoEra -> Text
+renderEra (AnyCardanoEra ByronEra)   = "Byron"
+renderEra (AnyCardanoEra ShelleyEra) = "Shelley"
+renderEra (AnyCardanoEra AllegraEra) = "Allegra"
+renderEra (AnyCardanoEra MaryEra)    = "Mary"
+renderEra (AnyCardanoEra AlonzoEra)  = "Alonzo"
+renderEra (AnyCardanoEra BabbageEra) = "Babbage"
+

@@ -21,6 +21,7 @@ import           Cardano.Tracer.Acceptors.Run
 import           Cardano.Tracer.Configuration
 import           Cardano.Tracer.Handlers.RTView.Run
 import           Cardano.Tracer.Handlers.RTView.State.Historical
+import           Cardano.Tracer.MetaTrace
 import           Cardano.Tracer.Types
 import           Cardano.Tracer.Utils
 import           Trace.Forward.Utils.DataPoint
@@ -41,13 +42,15 @@ launchAcceptorsSimple mode localSock dpName = do
   savedTO <- initSavedTraceObjects
   currentLogLock <- newLock
   currentDPLock <- newLock
-  eventsQueues <- initEventsQueues connectedNodesNames dpRequestors currentDPLock
+  eventsQueues <- initEventsQueues Nothing connectedNodesNames dpRequestors currentDPLock
 
   chainHistory <- initBlockchainHistory
   resourcesHistory <- initResourcesHistory
   txHistory <- initTransactionsHistory
 
   rtViewPageOpened <- newTVarIO False
+
+  tr <- mkTracerTracer $ SeverityF $ Just Warning
 
   let tracerEnv =
         TracerEnv
@@ -65,6 +68,8 @@ launchAcceptorsSimple mode localSock dpName = do
           , teDPRequestors        = dpRequestors
           , teProtocolsBrake      = protocolsBrake
           , teRTViewPageOpened    = rtViewPageOpened
+          , teRTViewStateDir      = Nothing
+          , teTracer              = tr
           }
 
   void . sequenceConcurrently $

@@ -3,6 +3,8 @@
 , stateDir
 , basePort
 , node-services
+, unixHttpServerPort ? null
+, inetHttpServerPort ? null
   ## Last-moment overrides:
 , extraBackendConfig
 }:
@@ -23,11 +25,21 @@ let
         strip_ansi = true;
       };
       supervisorctl = {};
-      inet_http_server = {
-        port = "127.0.0.1:9001";
-      };
       "rpcinterface:supervisor" = {
         "supervisor.rpcinterface_factory" = "supervisor.rpcinterface:make_main_rpcinterface";
+      };
+    }
+    //
+    lib.attrsets.optionalAttrs (unixHttpServerPort != null) {
+      unix_http_server = {
+        file = unixHttpServerPort;
+        chmod = "0777";
+      };
+    }
+    //
+    lib.attrsets.optionalAttrs (inetHttpServerPort != null) {
+      inet_http_server = {
+        port = inetHttpServerPort;
       };
     }
     //
@@ -70,10 +82,10 @@ let
   ##
   nodeSvcSupervisorProgram = { nodeSpec, service, ... }:
     nameValuePair "program:${nodeSpec.value.name}" {
-      directory      = "${service.value.stateDir}";
+      directory      = "${service.value.stateDir 0}";
       command        = "sh start.sh";
-      stdout_logfile = "${service.value.stateDir}/stdout";
-      stderr_logfile = "${service.value.stateDir}/stderr";
+      stdout_logfile = "${service.value.stateDir 0}/stdout";
+      stderr_logfile = "${service.value.stateDir 0}/stderr";
       autostart      = false;
       autorestart    = false;
       startretries   = 1;

@@ -1,4 +1,5 @@
 {-# LANGUAGE NamedFieldPuns #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 -- | This top-level module is used by 'cardano-tracer' app.
 module Cardano.Tracer.Run
@@ -20,28 +21,37 @@ import           Cardano.Tracer.Handlers.Metrics.Servers
 import           Cardano.Tracer.Handlers.RTView.Run
 import           Cardano.Tracer.Handlers.RTView.State.Historical
 import           Cardano.Tracer.Handlers.RTView.Update.Historical
+import           Cardano.Tracer.MetaTrace
 import           Cardano.Tracer.Types
 import           Cardano.Tracer.Utils
 
 -- | Top-level run function, called by 'cardano-tracer' app.
 runCardanoTracer :: TracerParams -> IO ()
-runCardanoTracer TracerParams{tracerConfig} = do
+runCardanoTracer TracerParams{tracerConfig, stateDir, logSeverity} = do
+  tr <- mkTracerTracer $ SeverityF logSeverity
+  traceWith tr $ TracerParamsAre tracerConfig stateDir logSeverity
+
   config <- readTracerConfig tracerConfig
+  traceWith tr $ TracerConfigIs config
+
   brake <- initProtocolsBrake
   dpRequestors <- initDataPointRequestors
-  doRunCardanoTracer config brake dpRequestors
+  doRunCardanoTracer config stateDir tr brake dpRequestors
 
 -- | Runs all internal services of the tracer.
 doRunCardanoTracer
   :: TracerConfig        -- ^ Tracer's configuration.
+  -> Maybe FilePath      -- ^ Path to RTView's internal state files.
+  -> Trace IO TracerTrace
   -> ProtocolsBrake      -- ^ The flag we use to stop all the protocols.
   -> DataPointRequestors -- ^ The DataPointRequestors to ask 'DataPoint's.
   -> IO ()
-doRunCardanoTracer config protocolsBrake dpRequestors = do
+doRunCardanoTracer config rtViewStateDir tr protocolsBrake dpRequestors = do
+  traceWith tr TracerInitStarted
   connectedNodes      <- initConnectedNodes
   connectedNodesNames <- initConnectedNodesNames
   acceptedMetrics <- initAcceptedMetrics
-  savedTO         <- initSavedTraceObjects
+  savedTO <- initSavedTraceObjects
 
   chainHistory     <- initBlockchainHistory
   resourcesHistory <- initResourcesHistory
@@ -49,7 +59,9 @@ doRunCardanoTracer config protocolsBrake dpRequestors = do
 
   currentLogLock <- newLock
   currentDPLock  <- newLock
-  eventsQueues   <- initEventsQueues connectedNodesNames dpRequestors currentDPLock
+
+  traceWith tr TracerInitEventQueues
+  eventsQueues   <- initEventsQueues rtViewStateDir connectedNodesNames dpRequestors currentDPLock
 
   rtViewPageOpened <- newTVarIO False
 
@@ -70,13 +82,19 @@ doRunCardanoTracer config protocolsBrake dpRequestors = do
           , teDPRequestors        = dpRequestors
           , teProtocolsBrake      = protocolsBrake
           , teRTViewPageOpened    = rtViewPageOpened
+          , teRTViewStateDir      = rtViewStateDir
+          , teTracer              = tr
           }
 
   -- Specify what should be done before 'cardano-tracer' stops.
   beforeProgramStops $ do
+    traceWith tr TracerShutdownInitiated
     backupAllHistory tracerEnv
+    traceWith tr TracerShutdownHistBackup
     applyBrake (teProtocolsBrake tracerEnv)
+    traceWith tr TracerShutdownComplete
 
+  traceWith tr TracerInitDone
   void . sequenceConcurrently $
     [ runLogsRotator    tracerEnv
     , runMetricsServers tracerEnv

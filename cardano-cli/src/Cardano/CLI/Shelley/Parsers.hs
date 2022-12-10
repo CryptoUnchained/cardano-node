@@ -14,7 +14,7 @@ module Cardano.CLI.Shelley.Parsers
   , parseTxIn
   ) where
 
-import           Cardano.Prelude hiding (All, Any, option)
+import           Cardano.Prelude hiding (All, Any)
 import           Prelude (String)
 
 import           Control.Monad.Fail (fail)
@@ -50,9 +50,9 @@ import           Cardano.Api.Shelley
 
 import           Cardano.Chain.Common (BlockCount (BlockCount))
 import           Cardano.CLI.Shelley.Commands
-import           Cardano.CLI.Shelley.Key (InputFormat (..), PaymentVerifier (..),
-                   StakeVerifier (..), VerificationKeyOrFile (..), VerificationKeyOrHashOrFile (..),
-                   VerificationKeyTextOrFile (..), deserialiseInput, renderInputDecodeError)
+import           Cardano.CLI.Shelley.Key (PaymentVerifier (..), StakeVerifier (..),
+                   VerificationKeyOrFile (..), VerificationKeyOrHashOrFile (..),
+                   VerificationKeyTextOrFile (..))
 import           Cardano.CLI.Types
 
 {- HLINT ignore "Use <$>" -}
@@ -718,7 +718,6 @@ pTransaction =
             <*> many pMetadataFile
             <*> optional pProtocolParamsSourceSpec
             <*> optional pUpdateProposalFile
-            <*> pOutputSerialisation
             <*> (OutputTxBodyOnly <$> pTxBodyFile Output <|> pCalculatePlutusScriptCost)
 
   pChangeAddress :: Parser TxOutChangeAddress
@@ -755,7 +754,6 @@ pTransaction =
                <*> many pMetadataFile
                <*> optional pProtocolParamsSourceSpec
                <*> optional pUpdateProposalFile
-               <*> pOutputSerialisation
                <*> pTxBodyFile Output
 
   pTransactionSign  :: Parser TransactionCmd
@@ -941,6 +939,8 @@ pQueryCmd =
         (Opt.info pKesPeriodInfo $ Opt.progDesc "Get information about the current KES period and your node's operational certificate.")
     , subParser "pool-state"
         (Opt.info pQueryPoolState $ Opt.progDesc "Dump the pool state")
+    , subParser "tx-mempool"
+        (Opt.info pQueryTxMempool $ Opt.progDesc "Local Mempool info")
     ]
   where
     pQueryProtocolParameters :: Parser QueryCmd
@@ -1010,6 +1010,25 @@ pQueryCmd =
       <*> pNetworkId
       <*> many pStakePoolVerificationKeyHash
 
+    pQueryTxMempool :: Parser QueryCmd
+    pQueryTxMempool = QueryTxMempool
+      <$> pConsensusModeParams
+      <*> pNetworkId
+      <*> pTxMempoolQuery
+      <*> pMaybeOutputFile
+      where
+        pTxMempoolQuery :: Parser TxMempoolQuery
+        pTxMempoolQuery = asum
+          [ subParser "info"
+            (Opt.info (pure TxMempoolQueryInfo) $
+              Opt.progDesc "Ask the node about the current mempool's capacity and sizes")
+          , subParser "next-tx"
+            (Opt.info (pure TxMempoolQueryNextTx) $
+              Opt.progDesc "Requests the next transaction from the mempool's current list")
+          , subParser "tx-exists"
+            (Opt.info (TxMempoolQueryTxExists <$> argument Opt.str (metavar "TX_ID")) $
+              Opt.progDesc "Query if a particular transaction exists in the mempool")
+          ]
     pLeadershipSchedule :: Parser QueryCmd
     pLeadershipSchedule = QueryLeadershipSchedule
       <$> pConsensusModeParams
@@ -1768,17 +1787,6 @@ pOutputFormat =
     <> Opt.value OutputFormatBech32
     )
 
-pOutputSerialisation :: Parser OutputSerialisation
-pOutputSerialisation =
-  Opt.flag' OutputLedgerCDDLSerialisation
-    (  Opt.long "cddl-format"
-    <> Opt.help "Serialise in the ledger CDDL specified CBOR format."
-    ) <|>
-  Opt.flag OutputCliSerialisation OutputCliSerialisation
-    (  Opt.long "cli-format"
-    <> Opt.help "Serialise in the cardano-cli CBOR format."
-    )
-
 pMaybeOutputFile :: Parser (Maybe OutputFile)
 pMaybeOutputFile =
   optional $
@@ -2064,7 +2072,7 @@ pCardanoEra = asum
       )
   , Opt.flag' (AnyCardanoEra MaryEra)
       (  Opt.long "mary-era"
-      <> Opt.help "Specify the Mary era (default)"
+      <> Opt.help "Specify the Mary era"
       )
   , Opt.flag' (AnyCardanoEra AlonzoEra)
       (  Opt.long "alonzo-era"
@@ -2072,10 +2080,10 @@ pCardanoEra = asum
       )
   , Opt.flag' (AnyCardanoEra BabbageEra)
       (  Opt.long "babbage-era"
-      <> Opt.help "Specify the Babbage era"
+      <> Opt.help "Specify the Babbage era (default)"
       )
     -- Default for now:
-  , pure (AnyCardanoEra AlonzoEra)
+  , pure (AnyCardanoEra BabbageEra)
   ]
 
 pTxIn :: BalanceTxExecUnits

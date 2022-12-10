@@ -1,3 +1,4 @@
+{-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE LambdaCase #-}
@@ -51,9 +52,8 @@ import qualified Data.Aeson as AE
 import qualified Data.Aeson.Text as AE
 import qualified Data.HashMap.Strict as HM
 import           Data.IORef
-import           Data.Map (Map)
-import qualified Data.Map as Map
-import qualified Data.Map.Strict as SMap
+import           Data.Map.Strict (Map)
+import qualified Data.Map.Strict as Map
 
 import           Data.Text (Text, pack, unpack)
 import           Data.Text.Lazy (toStrict)
@@ -179,7 +179,7 @@ data SeverityS
     | Critical                -- ^ Severe situations
     | Alert                   -- ^ Take immediate action
     | Emergency               -- ^ System is unusable
-  deriving (Show, Eq, Ord, Bounded, Enum)
+  deriving (Show, Eq, Ord, Bounded, Enum, Read, AE.ToJSON)
 
 -- | Severity for a filter
 -- Nothing means don't show anything (Silence)
@@ -369,7 +369,7 @@ emptyTraceConfig = TraceConfig {
   , tcForwarder = defaultForwarder
   , tcNodeName = Nothing
   , tcPeerFrequency = Just 2000 -- Every 2 seconds
-  , tcResourceFrequency = Just 1000 -- Every second
+  , tcResourceFrequency = Just 5000 -- Every five seconds
   }
 
 ---------------------------------------------------------------------------
@@ -388,15 +388,15 @@ data TraceControl where
 newtype DocCollector = DocCollector (IORef (Map Int LogDoc))
 
 data LogDoc = LogDoc {
-    ldDoc        :: ! Text
-  , ldMetricsDoc :: ! (SMap.Map Text Text)
-  , ldNamespace  :: ! [Namespace]
-  , ldSeverity   :: ! [SeverityS]
-  , ldPrivacy    :: ! [Privacy]
-  , ldDetails    :: ! [DetailLevel]
-  , ldBackends   :: ! [BackendConfig]
-  , ldFiltered   :: ! [SeverityF]
-  , ldLimiter    :: ! [(Text, Double)]
+    ldDoc        :: !Text
+  , ldMetricsDoc :: !(Map.Map Text Text)
+  , ldNamespace  :: ![Namespace]
+  , ldSeverity   :: ![SeverityS]
+  , ldPrivacy    :: ![Privacy]
+  , ldDetails    :: ![DetailLevel]
+  , ldBackends   :: ![BackendConfig]
+  , ldFiltered   :: ![SeverityF]
+  , ldLimiter    :: ![(Text, Double)]
 } deriving(Eq, Show)
 
 emptyLogDoc :: Text -> [(Text, Text)] -> LogDoc

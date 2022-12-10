@@ -17,30 +17,29 @@ import           Data.Time.Clock (UTCTime)
 import           Data.Time.Format (defaultTimeLocale, formatTime)
 
 import           Cardano.Tracer.Handlers.RTView.Notifications.Email
-import           Cardano.Tracer.Handlers.RTView.Notifications.Settings
 import           Cardano.Tracer.Handlers.RTView.Notifications.Types
 import           Cardano.Tracer.Types
 import           Cardano.Tracer.Utils
 
 makeAndSendNotification
-  :: ConnectedNodesNames
+  :: EmailSettings
+  -> ConnectedNodesNames
   -> DataPointRequestors
   -> Lock
   -> TVar UTCTime
   -> EventsQueue
   -> IO ()
-makeAndSendNotification connectedNodesNames dpRequestors currentDPLock lastTime eventsQueue = do
-  emailSettings <- readSavedEmailSettings
-  unless (incompleteEmailSettings emailSettings) $ do
-    events <- atomically $ nub <$> flushTBQueue eventsQueue
-    let (nodeIds, tss) = unzip $ nub [(nodeId, ts) | Event nodeId ts _ _ <- events]
-    unless (null nodeIds) $ do
-      nodeNames <-
-        forM nodeIds $ askNodeNameRaw connectedNodesNames dpRequestors currentDPLock
-      lastEventTime <- readTVarIO lastTime
-      let onlyNewEvents = filter (\(Event _ ts _ _) -> ts > lastEventTime) events
-      sendNotification emailSettings onlyNewEvents $ zip nodeIds nodeNames
-      updateLastTime $ maximum tss
+makeAndSendNotification emailSettings connectedNodesNames dpRequestors
+                        currentDPLock lastTime eventsQueue = do
+  events <- atomically $ nub <$> flushTBQueue eventsQueue
+  let (nodeIds, tss) = unzip $ nub [(nodeId, ts) | Event nodeId ts _ _ <- events]
+  unless (null nodeIds) $ do
+    nodeNames <-
+      forM nodeIds $ askNodeNameRaw connectedNodesNames dpRequestors currentDPLock
+    lastEventTime <- readTVarIO lastTime
+    let onlyNewEvents = filter (\(Event _ ts _ _) -> ts > lastEventTime) events
+    sendNotification emailSettings onlyNewEvents $ zip nodeIds nodeNames
+    updateLastTime $ maximum tss
  where
   updateLastTime = atomically . modifyTVar' lastTime . const
 

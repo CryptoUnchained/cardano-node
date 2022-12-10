@@ -7,10 +7,11 @@
 
 module Cardano.Node.Startup where
 
+import qualified Cardano.Api as Api
 import           Prelude
 
 import           Data.Aeson (FromJSON, ToJSON)
-import           Data.Map (Map)
+import           Data.Map.Strict (Map)
 import           Data.Monoid (Last (..), getLast)
 import           Data.Text (Text, pack)
 import           Data.Time.Clock (NominalDiffTime, UTCTime)
@@ -44,7 +45,6 @@ import           Ouroboros.Network.PeerSelection.Types (PeerAdvertise)
 import           Ouroboros.Network.Subscription.Dns (DnsSubscriptionTarget (..))
 import           Ouroboros.Network.Subscription.Ip (IPSubscriptionTarget (..))
 
-import           Cardano.Api.Protocol.Types (BlockType (..), protocolInfo)
 import           Cardano.Logging
 import           Cardano.Node.Configuration.POM (NodeConfiguration (..), ncProtocol)
 import           Cardano.Node.Configuration.Socket
@@ -89,6 +89,10 @@ data StartupTrace blk =
   --
   | NetworkConfigUpdateError Text
 
+  -- | Legacy topology file format is used.
+  --
+  | NetworkConfigLegacy
+
   -- | Log peer-to-peer network configuration, either on startup or when its
   -- updated.
   --
@@ -112,6 +116,16 @@ data StartupTrace blk =
   | BIShelley BasicInfoShelleyBased
   | BIByron BasicInfoByron
   | BINetwork BasicInfoNetwork
+
+severityStartupTracer :: StartupTrace blk -> SeverityS
+severityStartupTracer (StartupSocketConfigError _) = Error
+severityStartupTracer NetworkConfigUpdate = Notice
+severityStartupTracer (NetworkConfigUpdateError _) = Error
+severityStartupTracer NetworkConfigUpdateUnsupported = Warning
+severityStartupTracer P2PWarning = Warning
+severityStartupTracer P2PWarningDevelopementNetworkProtocols = Warning
+severityStartupTracer WarningDevelopmentNetworkProtocols {} = Warning
+severityStartupTracer _ = Info
 
 data BasicInfoCommon = BasicInfoCommon {
     biConfigPath    :: FilePath
@@ -184,17 +198,17 @@ prepareNodeInfo nc (SomeConsensusProtocol whichP pForInfo) tc nodeStartTime = do
     , niSystemStartTime = systemStartTime
     }
  where
-  cfg = pInfoConfig $ protocolInfo pForInfo
+  cfg = pInfoConfig $ Api.protocolInfo pForInfo
 
   systemStartTime :: UTCTime
   systemStartTime =
     case whichP of
-      ByronBlockType ->
+      Api.ByronBlockType ->
         getSystemStartByron
-      ShelleyBlockType ->
+      Api.ShelleyBlockType ->
         let DegenLedgerConfig cfgShelley = configLedger cfg
         in getSystemStartShelley cfgShelley
-      CardanoBlockType ->
+      Api.CardanoBlockType ->
         let CardanoLedgerConfig _ cfgShelley cfgAllegra cfgMary cfgAlonzo cfgBabbage = configLedger cfg
         in minimum [ getSystemStartByron
                    , getSystemStartShelley cfgShelley

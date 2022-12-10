@@ -137,9 +137,7 @@ txSubmissionClient tr bmtr initialTxSource endOfProtocolCallback =
         req = Req $ fromIntegral reqNum
     traceWith tr $ reqIdsTrace ack req blocking
     stateA <- discardAcknowledged blocking ack state
-    traceWith bmtr $ TraceBenchTxSubDebug "return from discard"
     (stateB, newTxs) <- produceNextTxs blocking req stateA
-    traceWith bmtr $ TraceBenchTxSubDebug "return from produceNext"
     let stateC@(_, UnAcked outs , stats) = queueNewTxs newTxs stateB
 
     traceWith tr $ idListTrace (ToAnnce newTxs) blocking
@@ -188,7 +186,7 @@ txSubmissionClient tr bmtr initialTxSource endOfProtocolCallback =
   txToIdSize = (Mempool.txId &&& txInBlockSize) . toGenTx
 
   toGenTx :: tx -> GenTx CardanoBlock
-  toGenTx tx = case shelleyBasedEra @ era of
+  toGenTx tx = case shelleyBasedEra @era of
     ShelleyBasedEraShelley  -> toConsensusGenTx $ TxInMode tx ShelleyEraInCardanoMode
     ShelleyBasedEraAllegra  -> toConsensusGenTx $ TxInMode tx AllegraEraInCardanoMode
     ShelleyBasedEraMary     -> toConsensusGenTx $ TxInMode tx MaryEraInCardanoMode

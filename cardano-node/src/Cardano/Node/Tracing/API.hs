@@ -7,12 +7,12 @@ module Cardano.Node.Tracing.API
   ( initTraceDispatcher
   ) where
 
-import           Prelude
 import           Cardano.Prelude (first)
+import           Prelude
 
 import           "contra-tracer" Control.Tracer (traceWith)
 import           "trace-dispatcher" Control.Tracer (nullTracer)
-import qualified Data.Map as Map
+import qualified Data.Map.Strict as Map
 import           Data.Maybe (fromMaybe)
 import           Data.Time.Clock (getCurrentTime)
 
@@ -39,6 +39,7 @@ import           Cardano.Node.Tracing
 import           Cardano.Node.Types
 
 import           Cardano.Logging hiding (traceWith)
+import           Cardano.Node.Tracing.DefaultTraceConfig (defaultCardanoConfig)
 import           Cardano.Node.Tracing.StateRep (NodeState (..))
 import           Cardano.Node.Tracing.Tracers
 import           Cardano.Node.Tracing.Tracers.Peer (startPeerTracer)
@@ -59,7 +60,7 @@ initTraceDispatcher ::
   -> NetworkP2PMode p2p
   -> IO (Tracers RemoteConnectionId LocalConnectionId blk p2p)
 initTraceDispatcher nc p networkMagic nodeKernel p2pMode = do
-  trConfig <- readConfiguration (unConfigPath $ ncConfigFile nc)
+  trConfig <- readConfigurationWithDefault (unConfigPath $ ncConfigFile nc) defaultCardanoConfig
   putStrLn $ "New tracer configuration: " <> show trConfig
 
   tracers <- mkTracers trConfig
@@ -95,7 +96,7 @@ initTraceDispatcher nc p networkMagic nodeKernel p2pMode = do
           -- TODO: check if this is the correct way to use withIOManager
           (forwardSink, dpStore) <- withIOManager $ \iomgr -> do
             let tracerSocketMode = Just . first unSocketPath =<< ncTraceForwardSocket nc
-            initForwarding iomgr trConfig networkMagic ekgStore tracerSocketMode
+            initForwarding iomgr trConfig networkMagic (Just ekgStore) tracerSocketMode
           pure (forwardTracer forwardSink, dataPointTracer dpStore)
         else
           -- Since 'Forwarder' backend isn't enabled, there is no forwarding.

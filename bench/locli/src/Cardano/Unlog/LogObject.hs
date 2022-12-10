@@ -10,40 +10,37 @@
 
 module Cardano.Unlog.LogObject (module Cardano.Unlog.LogObject) where
 
-import Prelude (head, id, show, unzip3)
-import Cardano.Prelude hiding (Text, head, show)
+import           Cardano.Prelude hiding (Text, head, show)
+import           Prelude (head, id, show, unzip3)
 
-import Control.Monad (fail)
-import Data.Aeson (FromJSON(..), ToJSON(..), Value(..), Object, (.:), (.:?))
-import Data.Aeson qualified as AE
-import Data.Aeson.KeyMap qualified as KeyMap
-import Data.Aeson.Types (Parser)
-import Data.Aeson.Key qualified as Aeson
-import Data.ByteString.Lazy qualified as LBS
-import Data.Text qualified as LText
-import Data.Text.Short qualified as Text
-import Data.Text.Short (ShortText, fromText, toText)
-import Data.Time.Clock (NominalDiffTime, UTCTime)
-import Data.Tuple.Extra (fst3, snd3, thd3)
-import Data.Map qualified as Map
-import Data.Vector (Vector)
-import Data.Vector qualified as V
+import           Control.Monad (fail)
+import qualified Data.Aeson as AE
+import qualified Data.Aeson.Key as Aeson
+import qualified Data.Aeson.KeyMap as KeyMap
+import           Data.Aeson.Types (Parser)
+import qualified Data.ByteString.Lazy as LBS
+import qualified Data.Map.Strict as Map
+import qualified Data.Text as LText
+import           Data.Text.Short (ShortText, fromText, toText)
+import qualified Data.Text.Short as Text
+import           Data.Vector (Vector)
+import qualified Data.Vector as V
 
-import Cardano.Logging.Resources.Types
+import           Cardano.Logging.Resources.Types
 
-import Cardano.Analysis.Ground
-import Cardano.Util
+import           Cardano.Analysis.API.Ground
+import           Cardano.Util
 
-import Data.Accum (zeroUTCTime)
+import           Data.Accum (zeroUTCTime)
 
 
 type Text = ShortText
 
-runLiftLogObjects :: [JsonLogfile] -> Maybe HostDeduction
+runLiftLogObjects :: [JsonLogfile] -> Maybe HostDeduction -> Bool -> [LOAnyType]
                   -> ExceptT LText.Text IO [(JsonLogfile, [LogObject])]
-runLiftLogObjects fs (fmap hostDeduction -> mHostDed) = liftIO $
+runLiftLogObjects fs (fmap hostDeduction -> mHostDed) okDErr anyOks = liftIO $ do
   forConcurrently fs
-    (\f -> (f,) . fmap (setLOhost f mHostDed) <$> readLogObjectStream (unJsonLogfile f))
+    (\f -> (f,) . fmap (setLOhost f mHostDed) <$> readLogObjectStream (unJsonLogfile f) okDErr anyOks)
  where
    setLOhost :: JsonLogfile -> Maybe (JsonLogfile -> Host) -> LogObject -> LogObject
    setLOhost _   Nothing lo = lo
@@ -52,14 +49,38 @@ runLiftLogObjects fs (fmap hostDeduction -> mHostDed) = liftIO $
    -- joinT :: (IO a, IO b) -> IO (a, b)
    -- joinT (a, b) = (,) <$> a <*> b
 
-readLogObjectStream :: FilePath -> IO [LogObject]
-readLogObjectStream f =
+readLogObjectStream :: FilePath -> Bool -> [LOAnyType] -> IO [LogObject]
+readLogObjectStream f okDErr anyOks =
   LBS.readFile f
     <&>
-    fmap (either (LogObject zeroUTCTime "Cardano.Analysis.DecodeError" "DecodeError" "" (TId "0") . LODecodeError)
-                 id
-          . AE.eitherDecode)
+    (if okDErr then id else
+        filter ((\case
+                    LODecodeError input err -> error
+                      (printf "Decode error while parsing %s:\n%s\non input:\n>>>  %s" f (Text.toString err) (Text.toString input))
+                    _ -> True)
+               . loBody)) .
+    filter ((\case
+                LOAny laty obj ->
+                  if elem laty anyOks then True else
+                    error
+                    (printf "Unexpected LOAny while parsing %s -- %s: %s" f (show laty) (show obj))
+                _ -> True)
+             . loBody) .
+    filter (not . isDecodeError "Error in $: not enough input" . loBody) .
+    fmap (\bs ->
+            AE.eitherDecode bs &
+            either
+            (LogObject zeroUTCTime "Cardano.Analysis.DecodeError" "DecodeError" "" (TId "0")
+             . LODecodeError (Text.fromByteString (LBS.toStrict bs)
+                               & fromMaybe "#<ERROR decoding input fromByteString>")
+              . Text.fromText
+              . LText.pack)
+            id)
     . LBS.split (fromIntegral $ fromEnum '\n')
+ where
+   isDecodeError x = \case
+     LODecodeError _ x' -> x == x'
+     _ -> False
 
 data LogObject
   = LogObject
@@ -88,7 +109,12 @@ type Threeple t = (t, t, t)
 
 interpreters :: Threeple (Map Text (Object -> Parser LOBody))
 interpreters = map3ple Map.fromList . unzip3 . fmap ent $
-  [ (,,,) "TraceStartLeadershipCheck" "Forge.StartLeadershipCheck" "Forge.Loop.StartLeadershipCheck" $
+  -- Every second:
+  [ (,,,) "Resources" "Resources" "Resources" $
+    \v -> LOResources <$> parsePartialResourceStates (Object v)
+
+  -- Leadership:
+  , (,,,) "TraceStartLeadershipCheck" "Forge.StartLeadershipCheck" "Forge.Loop.StartLeadershipCheck" $
     \v -> LOTraceStartLeadershipCheck
             <$> v .: "slot"
             <*> (v .:? "utxoSize"     <&> fromMaybe 0)
@@ -96,7 +122,16 @@ interpreters = map3ple Map.fromList . unzip3 . fmap ent $
 
   , (,,,) "TraceBlockContext" "Forge.BlockContext" "Forge.Loop.BlockContext" $
     \v -> LOBlockContext
-            <$> v .: "tipBlockNo"
+            <$> v .: "current slot"
+            <*> v .: "tipBlockNo"
+
+  , (,,,) "TraceLedgerState" "Forge.LedgerState" "Forge.Loop.LedgerState" $
+    \v -> LOLedgerState
+            <$> v .: "slot"
+
+  , (,,,) "TraceLedgerView" "Forge.LedgerView" "Forge.Loop.LedgerView" $
+    \v -> LOLedgerView
+            <$> v .: "slot"
 
   , (,,,) "TraceNodeIsLeader" "Forge.NodeIsLeader" "Forge.Loop.NodeIsLeader" $
     \v -> LOTraceLeadershipDecided
@@ -107,6 +142,89 @@ interpreters = map3ple Map.fromList . unzip3 . fmap ent $
     \v -> LOTraceLeadershipDecided
             <$> v .: "slot"
             <*> pure False
+
+  -- Forging:
+  , (,,,) "TraceForgedBlock" "Forge.ForgedBlock" "Forge.Loop.ForgedBlock" $
+    \v -> LOBlockForged
+            <$> v .: "slot"
+            <*> v .: "blockNo"
+            <*> v .: "block"
+            <*> v .: "blockPrev"
+
+  -- Receipt:
+  , (,,,) "ChainSyncClientEvent.TraceDownloadedHeader" "ChainSyncClient.ChainSyncClientEvent.DownloadedHeader" "ChainSync.Client.DownloadedHeader" $
+    \v -> LOChainSyncClientSeenHeader
+            <$> v .: "slot"
+            <*> v .: "blockNo"
+            <*> v .: "block"
+
+  , (,,,) "SendFetchRequest" "BlockFetchClient.SendFetchRequest" "BlockFetch.Client.SendFetchRequest" $
+    \v -> LOBlockFetchClientRequested
+            <$> v .: "head"
+            <*> v .: "length"
+
+  , (,,,) "CompletedBlockFetch" "BlockFetchClient.CompletedBlockFetch" "BlockFetch.Client.CompletedBlockFetch" $
+    \v -> LOBlockFetchClientCompletedFetch
+            <$> v .: "block"
+
+  -- Forwarding:
+  , (,,,) "ChainSyncServerEvent.TraceChainSyncServerRead.AddBlock" "unknown0" "unknown1" $
+    \v -> LOChainSyncServerSendHeader . fromMaybe (error $ "Incompatible LOChainSyncServerSendHeader: " <> show v)
+          <$>  v .:? "block"
+
+  , (,,,) "ChainSyncServerEvent.TraceChainSyncServerReadBlocked.AddBlock" "ChainSyncServerEvent.TraceChainSyncServerUpdate" "ChainSync.ServerHeader.Update" $
+    \v -> case ( KeyMap.lookup "risingEdge" v
+               , KeyMap.lookup "blockingRead" v
+               , KeyMap.lookup "rollBackTo" v) of
+            (Just (Bool False), _, _) -> pure $ LOAny LAFallingEdge v
+            (_, Just (Bool False), _) -> pure $ LOAny LANonBlocking v
+            (_, _, Just _)            -> pure $ LOAny LARollback    v
+            -- Should be either rising edge+rollforward, or legacy:
+            _ -> do
+              blockLegacy <- v .:? "block"
+              block       <- v .:? "addBlock"
+              pure $
+                LOChainSyncServerSendHeader
+                ((block <|> blockLegacy)
+                  & fromMaybe (error $ "Incompatible LOChainSyncServerSendHeader: " <> show v)
+                  & Text.take 64
+                  & Hash)
+
+  , (,,,) "TraceBlockFetchServerSendBlock" "BlockFetchServer.SendBlock" "BlockFetch.Server.SendBlock" $
+    \v -> LOBlockFetchServerSending
+            <$> v .: "block"
+
+  -- Adoption:
+  , (,,,) "TraceAddBlockEvent.AddedToCurrentChain" "ChainDB.AddBlockEvent.AddedToCurrentChain" "ChainDB.AddBlockEvent.AddedToCurrentChain" $
+    \v -> LOBlockAddedToCurrentChain
+            <$> ((v .: "newtip")     <&> hashFromPoint)
+            <*> pure SNothing
+            <*> (v .:? "chainLengthDelta"
+                -- Compat for node versions 1.27 and older:
+                 <&> fromMaybe 1)
+  -- TODO: we should clarify the distinction between the two cases (^ and v).
+  , (,,,) "TraceAdoptedBlock" "Forge.AdoptedBlock" "Forge.Loop.AdoptedBlock" $
+    \v -> LOBlockAddedToCurrentChain
+            <$> v .: "blockHash"
+            <*> ((v .: "blockSize") <&> SJust)
+            <*> pure 1
+
+  -- Ledger snapshots:
+  , (,,,) "TraceLedgerEvent.TookSnapshot" "LedgerEvent.TookSnapshot" "ChainDB.LedgerEvent.TookSnapshot" $
+    \_ -> pure LOLedgerTookSnapshot
+
+  -- Tx receive path & mempool:
+  , (,,,) "TraceBenchTxSubServAck" "TraceBenchTxSubServAck" "TraceBenchTxSubServAck" $
+    \v -> LOTxsAcked <$> v .: "txIds"
+
+  , (,,,) "TraceTxSubmissionCollected" "TraceTxSubmissionCollected" "TraceTxSubmissionCollected" $
+    \v -> LOTxsCollected
+            <$> v .: "count"
+
+  , (,,,) "TraceTxSubmissionProcessed" "TraceTxSubmissionProcessed" "TraceTxSubmissionProcessed" $
+    \v -> LOTxsProcessed
+            <$> v .: "accepted"
+            <*> v .: "rejected"
 
   , (,,,) "TraceMempoolAddedTx" "Mempool.AddedTx" "Mempool.AddedTx" $
     \v -> do
@@ -121,9 +239,7 @@ interpreters = map3ple Map.fromList . unzip3 . fmap ent $
   , (,,,) "TraceMempoolRejectedTx" "Mempool.RejectedTx" "Mempool.RejectedTx" $
     \_ -> pure LOMempoolRejectedTx
 
-  , (,,,) "TraceLedgerEvent.TookSnapshot" "LedgerEvent.TookSnapshot" "ChainDB.LedgerEvent.TookSnapshot" $
-    \_ -> pure LOLedgerTookSnapshot
-
+  -- Generator:
   , (,,,) "TraceBenchTxSubSummary" "TraceBenchTxSubSummary" "TraceBenchTxSubSummary" $
     \v -> do
        x :: Object <- v .: "summary"
@@ -133,67 +249,6 @@ interpreters = map3ple Map.fromList . unzip3 . fmap ent $
          <*> x .: "ssTxSent"
          <*> x .: "ssElapsed"
          <*> x .: "ssThreadwiseTps"
-
-  , (,,,) "TraceBenchTxSubServAck" "TraceBenchTxSubServAck" "TraceBenchTxSubServAck" $
-    \v -> LOTxsAcked <$> v .: "txIds"
-
-  , (,,,) "Resources" "Resources" "" $
-    \v -> LOResources <$> parsePartialResourceStates (Object v)
-
-  , (,,,) "TraceTxSubmissionCollected" "TraceTxSubmissionCollected" "TraceTxSubmissionCollected" $
-    \v -> LOTxsCollected
-            <$> v .: "count"
-
-  , (,,,) "TraceTxSubmissionProcessed" "TraceTxSubmissionProcessed" "TraceTxSubmissionProcessed" $
-    \v -> LOTxsProcessed
-            <$> v .: "accepted"
-            <*> v .: "rejected"
-
-  , (,,,) "TraceForgedBlock" "Forge.ForgedBlock" "Forge.Loop.ForgedBlock" $
-    \v -> LOBlockForged
-            <$> v .: "block"
-            <*> v .: "blockPrev"
-            <*> v .: "blockNo"
-            <*> v .: "slot"
-  , (,,,) "TraceAddBlockEvent.AddedToCurrentChain" "ChainDB.AddBlockEvent.AddedToCurrentChain" "ChainDB.AddBlockEvent.AddedToCurrentChain" $
-    \v -> LOBlockAddedToCurrentChain
-            <$> ((v .: "newtip")     <&> hashFromPoint)
-            <*> pure Nothing
-            <*> (v .:? "chainLengthDelta"
-                -- Compat for node versions 1.27 and older:
-                 <&> fromMaybe 1)
-  -- TODO: we should clarify the distinction between the two cases (^ and v).
-  , (,,,) "TraceAdoptedBlock" "Forge.AdoptedBlock" "Forge.Loop.AdoptedBlock" $
-    \v -> LOBlockAddedToCurrentChain
-            <$> v .: "blockHash"
-            <*> ((v .: "blockSize") <&> Just)
-            <*> pure 1
-  , (,,,) "ChainSyncServerEvent.TraceChainSyncServerRead.AddBlock" "ChainSyncServerHeader.ChainSyncServerEvent.ServerRead.AddBlock" "" $
-    \v -> LOChainSyncServerSendHeader
-            <$> v .: "block"
-            <*> v .: "blockNo"
-            <*> v .: "slot"
-  , (,,,) "ChainSyncServerEvent.TraceChainSyncServerReadBlocked.AddBlock" "ChainSyncServerHeader.ChainSyncServerEvent.ServerReadBlocked.AddBlock" "ChainSync.ServerHeader.ChainSyncServerEvent.ServerReadBlocked.AddBlock" $
-    \v -> LOChainSyncServerSendHeader
-            <$> v .: "block"
-            <*> v .: "blockNo"
-            <*> v .: "slot"
-  -- v, but not ^ -- how is that possible?
-  , (,,,) "TraceBlockFetchServerSendBlock" "BlockFetchServer.SendBlock" "BlockFetch.Server.SendBlock" $
-    \v -> LOBlockFetchServerSending
-            <$> v .: "block"
-  , (,,,) "SendFetchRequest" "BlockFetchClient.SendFetchRequest" "BlockFetch.Client.SendFetchRequest" $
-    \v -> LOBlockFetchClientRequested
-            <$> v .: "head"
-            <*> v .: "length"
-  , (,,,) "ChainSyncClientEvent.TraceDownloadedHeader" "ChainSyncClient.ChainSyncClientEvent.DownloadedHeader" "ChainSync.Client.DownloadedHeader" $
-    \v -> LOChainSyncClientSeenHeader
-            <$> v .: "block"
-            <*> v .: "blockNo"
-            <*> v .: "slot"
-  , (,,,) "CompletedBlockFetch" "BlockFetchClient.CompletedBlockFetch" "BlockFetch.Client.CompletedBlockFetch" $
-    \v -> LOBlockFetchClientCompletedFetch
-            <$> v .: "block"
   ]
  where
    hashFromPoint :: LText.Text -> Hash
@@ -205,58 +260,93 @@ interpreters = map3ple Map.fromList . unzip3 . fmap ent $
    map3ple :: (a -> b) -> (a,a,a) -> (b,b,b)
    map3ple f (x,y,z) = (f x, f y, f z)
 
-logObjectStreamInterpreterKeysLegacy, logObjectStreamInterpreterKeysOldOrg, logObjectStreamInterpreterKeys :: [Text]
-logObjectStreamInterpreterKeysLegacy = Map.keys (interpreters & fst3)
-logObjectStreamInterpreterKeysOldOrg = Map.keys (interpreters & snd3)
+logObjectStreamInterpreterKeysLegacy, logObjectStreamInterpreterKeys :: [Text]
+logObjectStreamInterpreterKeysLegacy =
+  logObjectStreamInterpreterKeysLegacy1 <> logObjectStreamInterpreterKeysLegacy2
+ where
+   logObjectStreamInterpreterKeysLegacy1 = Map.keys (interpreters & fst3)
+   logObjectStreamInterpreterKeysLegacy2 = Map.keys (interpreters & snd3)
 logObjectStreamInterpreterKeys       = Map.keys (interpreters & thd3)
 
 data LOBody
-  = LOTraceStartLeadershipCheck !SlotNo !Word64 !Double
-  | LOTraceLeadershipDecided    !SlotNo !Bool
-  | LOResources !ResourceStats
-  | LOMempoolTxs !Word64
-  | LOMempoolRejectedTx
-  | LOLedgerTookSnapshot
-  | LOBlockContext !Word64
-  | LOGeneratorSummary !Bool !Word64 !NominalDiffTime (Vector Double)
-  | LOTxsAcked !(Vector Text)
-  | LOTxsCollected !Word64
-  | LOTxsProcessed !Word64 !Int
+  -- Every second:
+  = LOResources !ResourceStats
+  -- Leadership:
+  | LOTraceStartLeadershipCheck !SlotNo !Word64 !Double
+  | LOBlockContext
+    { loSlotNo           :: !SlotNo
+    , loBlockNo          :: !BlockNo
+    }
+  | LOLedgerState
+    { loSlotNo           :: !SlotNo
+    }
+  | LOLedgerView
+    { loSlotNo           :: !SlotNo
+    }
+  | LOTraceLeadershipDecided
+    { loSlotNo           :: !SlotNo
+    , loLeader           :: !Bool
+    }
+  -- Forging:
   | LOBlockForged
-    { loBlock            :: !Hash
+    { loSlotNo           :: !SlotNo
+    , loBlockNo          :: !BlockNo
+    , loBlock            :: !Hash
     , loPrev             :: !Hash
+    }
+  -- Receipt:
+  | LOChainSyncClientSeenHeader
+    { loSlotNo           :: !SlotNo
     , loBlockNo          :: !BlockNo
-    , loSlotNo           :: !SlotNo
-    }
-  | LOBlockAddedToCurrentChain
-    { loBlock            :: !Hash
-    , loSize             :: !(Maybe Int)
-    , loLength           :: !Int
-    }
-  | LOChainSyncServerSendHeader
-    { loBlock            :: !Hash
-    , loBlockNo          :: !BlockNo
-    , loSlotNo           :: !SlotNo
-    }
-  | LOBlockFetchServerSending
-    { loBlock            :: !Hash
+    , loBlock            :: !Hash
     }
   | LOBlockFetchClientRequested
     { loBlock            :: !Hash
     , loLength           :: !Int
     }
-  | LOChainSyncClientSeenHeader
-    { loBlock            :: !Hash
-    , loBlockNo          :: !BlockNo
-    , loSlotNo           :: !SlotNo
-    }
   | LOBlockFetchClientCompletedFetch
     { loBlock            :: !Hash
     }
-  | LOAny !Object
-  | LODecodeError !String
-  deriving (Generic, Show)
+  -- Forwarding:
+  | LOChainSyncServerSendHeader
+    { loBlock            :: !Hash
+    }
+  | LOBlockFetchServerSending
+    { loBlock            :: !Hash
+    }
+  -- Adoption:
+  | LOBlockAddedToCurrentChain
+    { loBlock            :: !Hash
+    , loSize             :: !(SMaybe Int)
+    , loLength           :: !Int
+    }
+  -- Ledger snapshots:
+  | LOLedgerTookSnapshot
+  -- Tx receive path & mempool:
+  | LOTxsAcked !(Vector Text)
+  | LOTxsCollected !Word64
+  | LOTxsProcessed !Word64 !Int
+  | LOMempoolTxs !Word64
+  | LOMempoolRejectedTx
+  -- Generator:
+  | LOGeneratorSummary !Bool !Word64 !NominalDiffTime ![Double]
+  -- Everything else:
+  | LOAny !LOAnyType !Object
+  | LODecodeError
+    { loRawText :: !ShortText
+    , loError   :: !ShortText
+    }
+  deriving (Eq, Generic, Show)
   deriving anyclass NFData
+
+data LOAnyType
+  = LAFallingEdge
+  | LANonBlocking
+  | LARollback
+  | LANoInterpreter
+  deriving (Eq, Generic, NFData, Read, Show, ToJSON)
+
+deriving instance Eq ResourceStats
 
 instance ToJSON LOBody
 
@@ -277,14 +367,14 @@ instance FromJSON LogObject where
       <*> pure kind
       <*> v .: "host"
       <*> v .: "thread"
-      <*> case Map.lookup  ns                                       (thd3 interpreters) <|>
-               Map.lookup  ns                                       (snd3 interpreters) <|>
-               Map.lookup (ns
+      <*> case Map.lookup  ns                                       (thd3 interpreters)
+           <|> Map.lookup  ns                                       (snd3 interpreters)
+           <|> Map.lookup (kind
                            & Text.stripPrefix "Cardano.Node."
-                           & fromMaybe "")                          (snd3 interpreters) <|>
-               Map.lookup  kind                                     (fst3 interpreters) of
+                           & fromMaybe kind)                        (snd3 interpreters)
+           <|> Map.lookup  kind                                     (fst3 interpreters) of
             Just interp -> interp unwrapped
-            Nothing -> pure $ LOAny unwrapped
+            Nothing -> pure $ LOAny LANoInterpreter unwrapped
    where
      unwrap :: Text -> Text -> Object -> Parser (Object, Text)
      unwrap wrappedKeyPred unwrapKey v = do
@@ -304,16 +394,20 @@ extendObject k _ _ = error . Text.unpack $ "Summary key '" <> k <> "' does not s
 parsePartialResourceStates :: Value -> Parser (Resources Word64)
 parsePartialResourceStates =
   AE.withObject "NodeSetup" $
-    \o ->
-      Resources
-      <$> o .: "CentiCpu"
-      <*> o .: "CentiGC"
-      <*> o .: "CentiMut"
-      <*> o .: "GcsMajor"
-      <*> o .: "GcsMinor"
-      <*> o .: "Alloc"
-      <*> o .: "Live"
-      <*> (o .:? "Heap" <&> fromMaybe 0)
-      <*> o .: "RSS"
-      <*> o .: "CentiBlkIO"
-      <*> o .: "Threads"
+    \o -> do
+      rCentiCpu   <- o .:  "CentiCpu"
+      rCentiGC    <- o .:  "CentiGC"
+      rCentiMut   <- o .:  "CentiMut"
+      rGcsMajor   <- o .:  "GcsMajor"
+      rGcsMinor   <- o .:  "GcsMinor"
+      rAlloc      <- o .:  "Alloc"
+      rLive       <- o .:? "Heap"       <&> fromMaybe 0
+      rHeap       <- o .:  "Live"
+      rRSS        <- o .:  "RSS"
+      rCentiBlkIO <- o .:  "CentiBlkIO"
+      rNetRd      <- o .:? "NetRd"      <&> fromMaybe 0
+      rNetWr      <- o .:? "NetWr"      <&> fromMaybe 0
+      rFsRd       <- o .:? "FsRd"       <&> fromMaybe 0
+      rFsWr       <- o .:? "FsWr"       <&> fromMaybe 0
+      rThreads    <- o .:  "Threads"
+      pure Resources{..}

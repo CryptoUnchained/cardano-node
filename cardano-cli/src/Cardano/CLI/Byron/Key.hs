@@ -14,11 +14,11 @@ module Cardano.CLI.Byron.Key
   )
 where
 
-import           Cardano.Prelude hiding (option, show, trace, (%))
+import           Cardano.Prelude hiding (show, trace, (%))
 import           Prelude (show)
 
 import           Control.Monad.Trans.Except.Extra (firstExceptT, handleIOExceptT, hoistEither, left,
-                     right)
+                   right)
 import qualified Data.ByteString as SB
 import qualified Data.ByteString.UTF8 as UTF8
 import           Data.String (fromString)
@@ -28,7 +28,6 @@ import           Formatting (build, sformat, (%))
 import           Cardano.Api.Byron
 
 import qualified Cardano.Chain.Common as Common
-import           Cardano.CLI.Helpers (textShow)
 import           Cardano.CLI.Shelley.Commands (ByronKeyFormat (..))
 import           Cardano.CLI.Types
 import qualified Cardano.Crypto.Signing as Crypto
@@ -71,9 +70,9 @@ newtype NewVerificationKeyFile =
 --   its hash and formatted view.
 prettyPublicKey :: VerificationKey ByronKey-> Text
 prettyPublicKey (ByronVerificationKey vk) =
-  sformat (  "    public key hash: "% build %
-           "\npublic key (base64): "% Crypto.fullVerificationKeyF %
-           "\n   public key (hex): "% Crypto.fullVerificationKeyHexF)
+  sformat (  "    public key hash: " % build %
+           "\npublic key (base64): " % Crypto.fullVerificationKeyF %
+           "\n   public key (hex): " % Crypto.fullVerificationKeyHexF)
     (Common.addressHash vk) vk vk
 
 byronWitnessToVerKey :: SomeByronSigningKey -> VerificationKey ByronKey

@@ -11,17 +11,16 @@ module Cardano.TxSubmit.Web
   ) where
 
 import           Cardano.Api (AllegraEra, AnyCardanoEra (AnyCardanoEra),
-                   AnyConsensusMode (AnyConsensusMode), AnyConsensusModeParams (..),
-                   AsType (..), CardanoEra (..), Error (..),
-                   FromSomeType (..), HasTypeProxy (AsType), InAnyCardanoEra (..),
+                   AnyConsensusMode (AnyConsensusMode), AnyConsensusModeParams (..), AsType (..),
+                   CardanoEra (..), Error (..), FromSomeType (..), HasTypeProxy (AsType),
+                   InAnyCardanoEra (..),
                    LocalNodeConnectInfo (LocalNodeConnectInfo, localConsensusModeParams, localNodeNetworkId, localNodeSocketPath),
-                   NetworkId, SerialiseAsCBOR (..), ShelleyEra, ToJSON, Tx, TxId (..),
-                   TxInMode (TxInMode),
+                   NetworkId, SerialiseAsCBOR (..), ShelleyEra, SocketPath (..), ToJSON, Tx,
+                   TxId (..), TxInMode (TxInMode),
                    TxValidationErrorInMode (TxValidationEraMismatch, TxValidationErrorInMode),
                    consensusModeOnly, getTxBody, getTxId, submitTxToNodeLocal, toEraInMode)
-import           Cardano.BM.Trace (Trace, logInfo)
 import           Cardano.Binary (DecoderError (..))
-import           Cardano.TxSubmit.CLI.Types (SocketPath (SocketPath))
+import           Cardano.BM.Trace (Trace, logInfo)
 import           Cardano.TxSubmit.Metrics (TxSubmitMetrics (..))
 import           Cardano.TxSubmit.Rest.Types (WebserverConfig (..), toWarpSettings)
 import           Cardano.TxSubmit.Types (EnvSocketError (..), RawCborDecodeError (..),
@@ -182,6 +181,7 @@ txSubmitPost trace metrics (AnyConsensusModeParams cModeParams) networkId (Socke
             liftIO $ logInfo trace $
               "txSubmitPost: failed to submit transaction: "
                 <> renderTxCmdError err
+            liftIO $ Gauge.inc (tsmFailCount metrics)
             errorResponse (TxSubmitFail err)
           Right txid -> do
             liftIO $ logInfo trace $

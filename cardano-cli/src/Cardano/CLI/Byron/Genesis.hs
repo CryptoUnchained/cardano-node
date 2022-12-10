@@ -12,7 +12,7 @@ module Cardano.CLI.Byron.Genesis
   )
 where
 
-import           Cardano.Prelude hiding (option, show, trace)
+import           Cardano.Prelude hiding (show, trace)
 import           Prelude (String)
 
 import           Control.Monad.Trans.Except.Extra (firstExceptT, left, right)
@@ -22,10 +22,11 @@ import           Data.Text.Lazy.Builder (toLazyText)
 import           Data.Time (UTCTime)
 import           Formatting.Buildable
 
-import           System.Directory (createDirectory, doesPathExist)
-import           Cardano.Api (Key (..), NetworkId, writeSecrets)
+import           Cardano.Api (Key (..), NetworkId, textShow, writeSecrets)
+
 import           Cardano.Api.Byron (ByronKey, SerialiseAsRawBytes (..), SigningKey (..),
-                     toByronRequiresNetworkMagic)
+                   toByronRequiresNetworkMagic)
+import           System.Directory (createDirectory, doesPathExist)
 
 import qualified Cardano.Chain.Common as Common
 import           Cardano.Chain.Delegation hiding (Map, epoch)
@@ -37,7 +38,6 @@ import qualified Cardano.Crypto as Crypto
 
 import           Cardano.CLI.Byron.Delegation
 import           Cardano.CLI.Byron.Key
-import           Cardano.CLI.Helpers (textShow)
 import           Cardano.CLI.Types (GenesisFile (..))
 
 data ByronGenesisError

@@ -23,7 +23,7 @@ import           Control.Monad.IO.Unlift (MonadUnliftIO)
 import qualified Control.Tracer as T
 import           Data.IORef (IORef, newIORef, readIORef, writeIORef)
 import           Data.List (maximumBy, nub)
-import qualified Data.Map as Map
+import qualified Data.Map.Strict as Map
 import           Data.Maybe (fromMaybe, mapMaybe)
 import           Data.Text (Text, intercalate, unpack)
 
@@ -96,7 +96,7 @@ withNamespaceConfig name extract withConfig tr = do
       T.traceWith (unpackTrace tt) (lc, Left Reset)
 
     mkTrace ref (lc, Left (Config c)) = do
-      ! val <- extract c (lcNamespace lc)
+      !val <- extract c (lcNamespace lc)
       eitherConf <- liftIO $ readIORef ref
       case eitherConf of
         Left (cmap, Nothing) ->

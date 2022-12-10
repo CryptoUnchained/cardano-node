@@ -11,11 +11,11 @@
 
 module Cardano.Chairman (chairmanTest) where
 
-import           Cardano.Prelude hiding (ByteString, STM, atomically, catch, option, show, throwIO)
+import           Cardano.Prelude hiding (ByteString, STM, atomically, catch, show, throwIO)
 import           Prelude (String, error, show)
 
+import           Control.Concurrent.Class.MonadSTM.Strict
 import           Control.Monad.Class.MonadAsync
-import           Control.Monad.Class.MonadSTM.Strict
 import           Control.Monad.Class.MonadThrow
 import           Control.Monad.Class.MonadTimer
 import           Control.Tracer
@@ -33,7 +33,6 @@ import           Ouroboros.Network.Protocol.ChainSync.Client
 import           Cardano.Api
 import           Cardano.Api.Byron
 import           Cardano.Api.Shelley
-import           Cardano.Node.Configuration.NodeAddress (SocketPath (..))
 
 -- | The chairman checks for consensus and progress.
 --

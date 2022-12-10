@@ -86,6 +86,7 @@ import           Data.Char (isAsciiLower, isAsciiUpper, isDigit)
 import           Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Text
+import           Data.Typeable (Typeable)
 import qualified Text.Parsec as Parsec
 import qualified Text.Parsec.String as Parsec
 
@@ -109,7 +110,7 @@ import           Cardano.Api.Script
 import           Cardano.Api.SerialiseBech32
 import           Cardano.Api.SerialiseRaw
 import           Cardano.Api.Utils
-import           Control.DeepSeq (NFData(..), deepseq)
+import           Control.DeepSeq (NFData (..), deepseq)
 
 
 
@@ -263,6 +264,25 @@ instance SerialiseAddress (Address ShelleyAddr) where
       either (const Nothing) Just $
       deserialiseFromBech32 (AsAddress AsShelleyAddr) t
 
+instance ToJSON (Address ShelleyAddr) where
+    toJSON = Aeson.String . serialiseAddress
+
+instance ToJSON (Address ByronAddr) where
+    toJSON = Aeson.String . serialiseAddress
+
+instance FromJSON (Address ByronAddr) where
+    parseJSON = Aeson.withText "Address" $ \txt ->
+      maybe
+        (fail "Cardano.Api.Address.FromJSON: Invalid Byron address.")
+        pure
+        (deserialiseAddress AsByronAddress txt)
+
+instance FromJSON (Address ShelleyAddr) where
+    parseJSON = Aeson.withText "Address" $ \txt ->
+      maybe
+        (fail "Cardano.Api.Address.FromJSON: Invalid Shelley address.")
+        pure
+        (deserialiseAddress AsShelleyAddress txt)
 
 makeByronAddress :: NetworkId
                  -> VerificationKey ByronKey
@@ -392,6 +412,19 @@ instance Eq (AddressInEra era) where
   (==) (AddressInEra ShelleyAddressInEra{} _)
        (AddressInEra ByronAddressInAnyEra _) = False
 
+instance Ord (AddressInEra era) where
+  compare (AddressInEra ByronAddressInAnyEra addr1)
+          (AddressInEra ByronAddressInAnyEra addr2) = compare addr1 addr2
+
+  compare (AddressInEra ShelleyAddressInEra{} addr1)
+          (AddressInEra ShelleyAddressInEra{} addr2) = compare addr1 addr2
+
+  compare (AddressInEra ByronAddressInAnyEra _)
+          (AddressInEra ShelleyAddressInEra{} _) = LT
+
+  compare (AddressInEra ShelleyAddressInEra{} _)
+          (AddressInEra ByronAddressInAnyEra _) = GT
+
 deriving instance Show (AddressInEra era)
 
 data AddressTypeInEra addrtype era where
@@ -412,7 +445,7 @@ instance HasTypeProxy era => HasTypeProxy (AddressInEra era) where
     data AsType (AddressInEra era) = AsAddressInEra (AsType era)
     proxyToAsType _ = AsAddressInEra (proxyToAsType (Proxy :: Proxy era))
 
-instance IsCardanoEra era => SerialiseAsRawBytes (AddressInEra era) where
+instance (IsCardanoEra era, Typeable era) => SerialiseAsRawBytes (AddressInEra era) where
 
     serialiseToRawBytes (AddressInEra ByronAddressInAnyEra addr) =
       serialiseToRawBytes addr

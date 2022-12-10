@@ -15,7 +15,7 @@ import           Control.Monad.Trans.Except.Extra (firstExceptT, handleIOExceptT
 import           Cardano.Api
 import           Cardano.Api.Shelley
 
-import           Cardano.CLI.Shelley.Key (InputDecodeError, VerificationKeyOrHashOrFile,
+import           Cardano.CLI.Shelley.Key (VerificationKeyOrHashOrFile,
                    readVerificationKeyOrHashOrFile, readVerificationKeyOrHashOrTextEnvFile)
 import           Cardano.CLI.Shelley.Parsers
 import           Cardano.CLI.Types
@@ -56,8 +56,6 @@ renderShelleyGovernanceError err =
       "Error decoding cost model: " <> Text.pack err' <> " at: " <> fp
     ShelleyGovernanceCmdCostModelReadError err' ->
       "Error reading the cost model: " <> Text.pack (displayError err')
-  where
-    textShow x = Text.pack (show x)
 
 
 runGovernanceCmd :: GovernanceCmd -> ExceptT ShelleyGovernanceCmdError IO ()

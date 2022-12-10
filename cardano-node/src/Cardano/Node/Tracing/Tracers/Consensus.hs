@@ -31,6 +31,7 @@ module Cardano.Node.Tracing.Tracers.Consensus
   , ClientMetrics(..)
   , initialClientMetrics
   , calculateBlockFetchClientMetrics
+  , docBlockFetchClientMetrics
 
   , severityBlockFetchServer
   , namesForBlockFetchServer
@@ -59,6 +60,10 @@ module Cardano.Node.Tracing.Tracers.Consensus
   , namesForForge
   , docForge
 
+  , severityForge2
+  , namesForForge2
+  , docForge2
+
   , namesForBlockchainTime
   , severityBlockchainTime
   , docBlockchainTime
@@ -66,6 +71,10 @@ module Cardano.Node.Tracing.Tracers.Consensus
   , namesForKeepAliveClient
   , severityKeepAliveClient
   , docKeepAliveClient
+
+  , namesConsensusStartupError
+  , severityConsensusStartupError
+  , docConsensusStartupError
 
   ) where
 
@@ -88,6 +97,8 @@ import           Cardano.Node.Tracing.Era.Byron ()
 import           Cardano.Node.Tracing.Era.Shelley ()
 import           Cardano.Node.Tracing.Formatting ()
 import           Cardano.Node.Tracing.Render
+import           Cardano.Node.Tracing.Tracers.ConsensusStartupException
+import           Cardano.Node.Tracing.Tracers.ForgingThreadStats (ForgingStats)
 import           Cardano.Node.Tracing.Tracers.StartLeadershipCheck
 import           Cardano.Prelude hiding (All, Show, show)
 
@@ -124,7 +135,6 @@ import           Ouroboros.Consensus.Node.Run (SerialiseNodeToNodeConstraints, e
 import           Ouroboros.Consensus.Node.Tracers
 import qualified Ouroboros.Consensus.Protocol.Ledger.HotKey as HotKey
 import           Ouroboros.Consensus.Util.Enclose
-
 
 
 instance LogFormatting a => LogFormatting (TraceLabelCreds a) where
@@ -277,7 +287,7 @@ instance ConvertRawHash blk
                <> [ "risingEdge" .= True | RisingEdge <- [enclosing] ]
 
   asMetrics (TraceChainSyncServerUpdate _tip (AddBlock _pt) _blocking FallingEdge) =
-      [CounterM "cardano.node.chainSync.rollForward" Nothing]
+      [CounterM "ChainSync.HeadersServed.Falling" Nothing]
   asMetrics _ = []
 
 
@@ -287,7 +297,8 @@ docChainSyncServerEventHeader :: Documented (TraceChainSyncServerEvent blk)
 docChainSyncServerEventHeader = Documented [
     DocMsg
       ["Update"]
-      [("ChainSync.HeadersServed", "A counter triggered only on header event")]
+      [("ChainSync.HeadersServed", "A counter triggered on any header event")
+      ,("ChainSync.HeadersServed.Falling", "A counter triggered only on header event with falling edge")]
       "A server read has occurred, either for an add block or a rollback"
   ]
 
@@ -417,21 +428,21 @@ instance LogFormatting ClientMetrics where
         let  size = Pq.size cmSlotMap
              msgs =
                [ DoubleM
-                    "cardano.node.metrics.blockfetchclient.blockdelay.s"
+                    "Blockfetch.Client.Blockdelay"
                     cmDelay
                , IntM
-                    "cardano.node.metrics.blockfetchclient.blocksize"
+                    "Blockfetch.Client.Blocksize"
                     (fromIntegral cmBlockSize)
-               , DoubleM "cardano.node.metrics.blockfetchclient.blockdelay.cdfOne"
+               , DoubleM "Blockfetch.Client.Blockdelay.cdfOne"
                     (fromIntegral (counter cmCdf1sVar) / fromIntegral size)
-               , DoubleM "cardano.node.metrics.blockfetchclient.blockdelay.cdfThree"
+               , DoubleM "Blockfetch.Client.Blockdelay.cdfThree"
                     (fromIntegral (counter cmCdf3sVar) / fromIntegral size)
-               , DoubleM "cardano.node.metrics.blockfetchclient.blockdelay.cdfFive"
+               , DoubleM "Blockfetch.Client.Blockdelay.cdfFive"
                     (fromIntegral (counter cmCdf5sVar) / fromIntegral size)
                ]
         in if cmDelay > 5
              then
-               CounterM "cardano.node.metrics.blockfetchclient.lateblocks" Nothing
+               CounterM "Blockfetch.Client.Lateblocks" Nothing
                  : msgs
              else msgs
       else []
@@ -508,6 +519,19 @@ calculateBlockFetchClientMetrics cm@ClientMetrics {..} _lc
 
 calculateBlockFetchClientMetrics cm _lc _ = pure cm
 
+docBlockFetchClientMetrics :: Documented (BlockFetch.TraceLabelPeer peer (BlockFetch.TraceFetchClientState header))
+docBlockFetchClientMetrics = Documented [
+    DocMsg
+      ["ClientMetrics"]
+      [ ("Blockfetch.Client.Blockdelay", "")
+      , ("Blockfetch.Client.Blocksize", "")
+      , ("Blockfetch.Client.Blockdelay.cdfOne", "")
+      , ("Blockfetch.Client.Blockdelay.cdfThree", "")
+      , ("Blockfetch.Client.Blockdelay.cdfFive", "")
+      ]
+      ""
+    ]
+
 severityBlockFetchClient ::
      BlockFetch.TraceLabelPeer peer (BlockFetch.TraceFetchClientState header)
   -> SeverityS
@@ -557,7 +581,7 @@ instance (HasHeader header, ConvertRawHash header) =>
     mconcat [ "kind" .= String "AddedFetchRequest" ]
   forMachine _dtal BlockFetch.AcknowledgedFetchRequest {} =
     mconcat [ "kind" .= String "AcknowledgedFetchRequest" ]
-  forMachine _dtal (BlockFetch.SendFetchRequest af) =
+  forMachine _dtal (BlockFetch.SendFetchRequest af _) =
     mconcat [ "kind" .= String "SendFetchRequest"
             , "head" .= String (renderChainHash
                                  (renderHeaderHash (Proxy @header))
@@ -927,8 +951,7 @@ namesForMempool TraceMempoolRemoveTxs {}          = ["RemoveTxs"]
 namesForMempool TraceMempoolManuallyRemovedTxs {} = ["ManuallyRemovedTxs"]
 
 instance
-  ( Show (ApplyTxErr blk)
-  , LogFormatting (ApplyTxErr blk)
+  ( LogFormatting (ApplyTxErr blk)
   , LogFormatting (GenTx blk)
   , ToJSON (GenTxId blk)
   , LedgerSupportsMempool blk
@@ -1081,7 +1104,14 @@ namesForForge'' TraceForgedInvalidBlock {}     = ["ForgedInvalidBlock"]
 namesForForge'' TraceAdoptedBlock {}           = ["AdoptedBlock"]
 
 namesForForge'''' :: TraceStartLeadershipCheckPlus -> [Text]
-namesForForge'''' TraceStartLeadershipCheckPlus{} = ["StartLeadershipCheckPlus"]
+namesForForge'''' TraceStartLeadershipCheckPlus{} = ["StartLeadershipCheck"]
+
+namesForForge2 :: ForgingStats -> [Text]
+namesForForge2 _ = ["StartLeadershipCheck"]
+
+severityForge2 :: ForgingStats -> SeverityS
+severityForge2 _ = Info
+
 
 instance ( tx ~ GenTx blk
          , ConvertRawHash blk
@@ -1298,7 +1328,7 @@ instance ( tx ~ GenTx blk
         <> ": " <> renderHeaderHash (Proxy @blk) (blockHash blk)
 
   asMetrics (TraceForgeStateUpdateError slot reason) =
-    IntM "cardano.node.forgeStateUpdateError" (fromIntegral $ unSlotNo slot) :
+    IntM "Forge.StateUpdateError" (fromIntegral $ unSlotNo slot) :
       (case getKESInfo (Proxy @blk) reason of
         Nothing -> []
         Just kesInfo ->
@@ -1530,7 +1560,7 @@ docForge' = Documented [
       "We adopted the block we produced, we also trace the transactions\
       \  that were adopted."
   , DocMsg
-      ["StartLeadershipCheckPlus"]
+      ["StartLeadershipCheck"]
       [ ("Forge.AboutToLeadSlotLast", "")
       , ("Forge.UtxoSize", "")
       , ("Forge.DelegMapSize", "")
@@ -1539,6 +1569,10 @@ docForge' = Documented [
       \  that were adopted."
 
   ]
+
+docForge2 :: Documented ForgingStats
+docForge2 = addDocumentedNamespace [] docForge'
+
 
 instance ( tx ~ GenTx blk
          , ConvertRawHash blk
@@ -1681,6 +1715,20 @@ instance Show remotePeer => LogFormatting (TraceKeepAliveClient remotePeer) wher
 
 docKeepAliveClient :: Documented (TraceKeepAliveClient peer)
 docKeepAliveClient = Documented [
+    DocMsg
+      []
+      []
+      ""
+  ]
+
+namesConsensusStartupError :: ConsensusStartupException -> [Text]
+namesConsensusStartupError _ = []
+
+severityConsensusStartupError :: ConsensusStartupException -> SeverityS
+severityConsensusStartupError _ = Critical
+
+docConsensusStartupError :: Documented ConsensusStartupException
+docConsensusStartupError = Documented [
     DocMsg
       []
       []

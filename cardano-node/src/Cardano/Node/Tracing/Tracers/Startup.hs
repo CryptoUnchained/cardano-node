@@ -13,11 +13,13 @@ module Cardano.Node.Tracing.Tracers.Startup
   , ppStartupInfoTrace
   ) where
 
+import           Cardano.Api (NetworkMagic (..), SlotNo (..))
+import qualified Cardano.Api as Api
 import           Prelude
 
 import           Data.Aeson (ToJSON (..), Value (..), (.=))
 import           Data.List (intercalate)
-import qualified Data.Map as Map
+import qualified Data.Map.Strict as Map
 import           Data.Text (Text, pack)
 import           Data.Time (getCurrentTime)
 import           Data.Time.Clock.POSIX (POSIXTime, utcTimeToPOSIXSeconds)
@@ -49,9 +51,6 @@ import           Ouroboros.Consensus.Shelley.Ledger.Ledger (shelleyLedgerGenesis
 
 import           Cardano.Logging
 
-import           Cardano.Api (NetworkMagic (..), SlotNo (..))
-import           Cardano.Api.Protocol.Types (BlockType (..), protocolInfo)
-
 import           Cardano.Git.Rev (gitRev)
 
 import           Cardano.Node.Configuration.POM (NodeConfiguration, ncProtocol)
@@ -68,7 +67,7 @@ getStartupInfo
   -> IO [StartupTrace blk]
 getStartupInfo nc (SomeConsensusProtocol whichP pForInfo) fp = do
   nodeStartTime <- getCurrentTime
-  let cfg = pInfoConfig $ protocolInfo pForInfo
+  let cfg = pInfoConfig $ Api.protocolInfo pForInfo
       basicInfoCommon = BICommon $ BasicInfoCommon {
                 biProtocol = pack . show $ ncProtocol nc
               , biVersion  = pack . showVersion $ version
@@ -79,13 +78,13 @@ getStartupInfo nc (SomeConsensusProtocol whichP pForInfo) fp = do
               }
       protocolDependentItems =
         case whichP of
-          ByronBlockType ->
+          Api.ByronBlockType ->
             let DegenLedgerConfig cfgByron = Consensus.configLedger cfg
             in [getGenesisValuesByron cfg cfgByron]
-          ShelleyBlockType ->
+          Api.ShelleyBlockType ->
             let DegenLedgerConfig cfgShelley = Consensus.configLedger cfg
             in [getGenesisValues "Shelley" cfgShelley]
-          CardanoBlockType ->
+          Api.CardanoBlockType ->
             let CardanoLedgerConfig cfgByron cfgShelley cfgAllegra
                                     cfgMary cfgAlonzo cfgBabbage = Consensus.configLedger cfg
             in getGenesisValuesByron cfg cfgByron
@@ -133,6 +132,7 @@ namesStartupInfo = \case
   NetworkConfigUpdateUnsupported            -> ["NetworkConfigUpdateUnsupported"]
   NetworkConfigUpdateError {}               -> ["NetworkConfigUpdateError"]
   NetworkConfig {}                          -> ["NetworkConfig"]
+  NetworkConfigLegacy {}                    -> ["NetworkConfigLegacy"]
   P2PWarning {}                             -> ["P2PWarning"]
   P2PWarningDevelopementNetworkProtocols {} -> ["P2PWarningDevelopementNetworkProtocols"]
   WarningDevelopmentNetworkProtocols {}     -> ["WarningDevelopmentNetworkProtocols"]
@@ -212,6 +212,10 @@ instance ( Show (BlockNodeToNodeVersion blk)
                , "publicRoots" .= toJSON publicRoots
                , "useLedgerAfter" .= UseLedger useLedgerAfter
                ]
+  forMachine _dtal NetworkConfigLegacy =
+      mconcat [ "kind" .= String "NetworkConfigLegacy"
+              , "message" .= String p2pNetworkConfigLegacyMessage
+              ]
   forMachine _dtal P2PWarning =
       mconcat [ "kind" .= String "P2PWarning"
                , "message" .= String p2pWarningMessage ]
@@ -319,6 +323,7 @@ ppStartupInfoTrace (NetworkConfig localRoots publicRoots useLedgerAfter) =
                             ++ show (unSlotNo slotNo)
       DontUseLedger         -> "Don't use ledger to get root peers."
   ]
+ppStartupInfoTrace NetworkConfigLegacy = p2pNetworkConfigLegacyMessage
 
 ppStartupInfoTrace P2PWarning = p2pWarningMessage
 
@@ -365,6 +370,14 @@ p2pWarningDevelopmentNetworkProtocolsMessage :: Text
 p2pWarningDevelopmentNetworkProtocolsMessage =
     "peer-to-peer requires TestEnableDevelopmentNetworkProtocols to be set to True"
 
+p2pNetworkConfigLegacyMessage :: Text
+p2pNetworkConfigLegacyMessage =
+    pack
+  $ intercalate "\n"
+  [ "You are using legacy p2p topology file format."
+  , "See https://github.com/input-output-hk/cardano-node/issues/4559"
+  , "Note that the legacy p2p format will be removed in `1.37` release."
+  ]
 
 docStartupInfo :: Documented (StartupTrace blk)
 docStartupInfo = Documented [

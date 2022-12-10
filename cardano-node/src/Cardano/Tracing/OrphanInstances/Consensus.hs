@@ -32,6 +32,9 @@ import           Cardano.Tracing.Render (renderChainHash, renderChunkNo, renderH
                    renderPointForVerbosity, renderRealPoint, renderRealPointAsPhrase,
                    renderTipBlockNo, renderTipHash, renderWithOrigin)
 
+import           Cardano.Node.Tracing.Tracers.ConsensusStartupException
+                   (ConsensusStartupException (..))
+
 import           Ouroboros.Consensus.Block (BlockProtocol, BlockSupportsProtocol, CannotForge,
                    ConvertRawHash (..), ForgeStateUpdateError, Header, RealPoint, blockNo,
                    blockPoint, blockPrevHash, getHeader, headerPoint, pointHash, realPointHash,
@@ -48,8 +51,8 @@ import           Ouroboros.Consensus.Mempool.API (MempoolSize (..), TraceEventMe
 import           Ouroboros.Consensus.MiniProtocol.BlockFetch.Server
                    (TraceBlockFetchServerEvent (..))
 import           Ouroboros.Consensus.MiniProtocol.ChainSync.Client (TraceChainSyncClientEvent (..))
-import           Ouroboros.Consensus.MiniProtocol.ChainSync.Server
-                   (BlockingType (..), TraceChainSyncServerEvent (..))
+import           Ouroboros.Consensus.MiniProtocol.ChainSync.Server (BlockingType (..),
+                   TraceChainSyncServerEvent (..))
 import           Ouroboros.Consensus.MiniProtocol.LocalTxSubmission.Server
                    (TraceLocalTxSubmissionServerEvent (..))
 import           Ouroboros.Consensus.Node.Run (RunNode, estimateBlockSize)
@@ -84,6 +87,20 @@ import qualified Ouroboros.Consensus.Storage.LedgerDB.OnDisk as LedgerDB
 
 {- HLINT ignore "Use const" -}
 {- HLINT ignore "Use record patterns" -}
+
+instance ToObject ConsensusStartupException where
+  toObject _ (ConsensusStartupException err) =
+    mconcat
+      [ "kind" .= String "ConsensusStartupException"
+      , "error" .= String (pack . show $ err)
+      ]
+
+instance HasPrivacyAnnotation ConsensusStartupException where
+instance HasSeverityAnnotation ConsensusStartupException where
+  getSeverityAnnotation _ = Critical
+instance Transformable Text IO ConsensusStartupException where
+  trTransformer = trStructured
+instance HasTextFormatter ConsensusStartupException where
 
 instance ConvertRawHash blk => ConvertRawHash (Header blk) where
   toShortRawHash _ h = toShortRawHash (Proxy @blk) h
@@ -203,7 +220,6 @@ instance HasPrivacyAnnotation (TraceBlockFetchServerEvent blk)
 instance HasSeverityAnnotation (TraceBlockFetchServerEvent blk) where
   getSeverityAnnotation _ = Info
 
-
 instance (ToObject peer, ToObject (TraceChainSyncClientEvent blk))
     => Transformable Text IO (TraceLabelPeer peer (TraceChainSyncClientEvent blk)) where
   trTransformer = trStructured
@@ -297,7 +313,7 @@ instance ConvertRawHash blk
   trTransformer = trStructured
 
 
-instance ( ToObject (ApplyTxErr blk), Show (ApplyTxErr blk), ToObject (GenTx blk),
+instance ( ToObject (ApplyTxErr blk), ToObject (GenTx blk),
            ToJSON (GenTxId blk), LedgerSupportsMempool blk)
       => Transformable Text IO (TraceEventMempool blk) where
   trTransformer = trStructured
@@ -319,7 +335,6 @@ showT = pack . show
 instance ( tx ~ GenTx blk
          , HasTxId tx
          , RunNode blk
-         , Show (TxId tx)
          , ToObject (LedgerError blk)
          , ToObject (OtherHeaderEnvelopeError blk)
          , ToObject (ValidationErr (BlockProtocol blk))
@@ -1262,7 +1277,7 @@ instance ConvertRawHash blk
         ]
         <> [ "risingEdge" .= True | RisingEdge <- [enclosing] ]
 
-instance ( Show (ApplyTxErr blk), ToObject (ApplyTxErr blk), ToObject (GenTx blk),
+instance ( ToObject (ApplyTxErr blk), ToObject (GenTx blk),
            ToJSON (GenTxId blk), LedgerSupportsMempool blk
          ) => ToObject (TraceEventMempool blk) where
   toObject verb (TraceMempoolAddedTx tx _mpSzBefore mpSzAfter) =
@@ -1306,11 +1321,7 @@ instance HasTextFormatter () where
 instance Transformable Text IO () where
   trTransformer = trStructuredText
 
-instance ( tx ~ GenTx blk
-         , ConvertRawHash blk
-         , HasTxId tx
-         , RunNode blk
-         , Show (TxId tx)
+instance ( RunNode blk
          , ToObject (LedgerError blk)
          , ToObject (OtherHeaderEnvelopeError blk)
          , ToObject (ValidationErr (BlockProtocol blk))

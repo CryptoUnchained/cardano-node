@@ -4,12 +4,11 @@ where
 
 import           Prelude
 
-import qualified Data.ByteString.Lazy.Char8 as BSL
-import           Data.Dependent.Sum ((==>))
-import           Data.String
-
 import           Control.Monad
-import           Control.Monad.IO.Class (liftIO)
+import qualified Data.ByteString.Lazy.Char8 as BSL
+
+import           Data.Either (fromRight)
+import           Data.String
 
 import           Cardano.Api
 import           Ouroboros.Network.NodeToClient (IOManager)
@@ -17,11 +16,11 @@ import           Ouroboros.Network.NodeToClient (IOManager)
 import           Cardano.Benchmarking.Script.Action
 import           Cardano.Benchmarking.Script.Aeson (prettyPrint)
 import           Cardano.Benchmarking.Script.Env as Script
-import           Cardano.Benchmarking.Script.Setters
-import           Cardano.Benchmarking.Script.Store
 import           Cardano.Benchmarking.Script.Types
-import           Cardano.Benchmarking.Tracer (initDefaultTracers)
-import           Cardano.Benchmarking.Types
+import           Cardano.Benchmarking.Tracer (initNullTracers)
+
+import           Cardano.TxGenerator.Setup.SigningKey
+import           Cardano.TxGenerator.Types
 
 import           Paths_tx_generator
 
@@ -31,7 +30,7 @@ runSelftest iom outFile = do
   let
     submitMode = maybe DiscardTX DumpToFile outFile
     fullScript = do
-        liftIO initDefaultTracers >>= set BenchTracers
+        setBenchTracers initNullTracers
         forM_ (testScript protocolFile submitMode) action
   runActionM fullScript iom >>= \case
     (Right a  , _ ,  ()) -> return $ Right a
@@ -43,38 +42,45 @@ printJSON = BSL.putStrLn $ prettyPrint $ testScript "/dev/zero" DiscardTX
 testScript :: FilePath -> SubmitMode -> [Action]
 testScript protocolFile submitMode =
   [ SetProtocolParameters (UseLocalProtocolFile protocolFile)
-  , Set (TTxAdditionalSize ==>  39)
-  , Set (TFee ==>  Lovelace 212345)
-  , Set (TTTL ==> SlotNo 1000000)
-  , Set (TNetworkId ==> Testnet (NetworkMagic {unNetworkMagic = 42}))
-  , InitWallet wallet
-  , DefineSigningKey key
-    (TextEnvelope { teType = TextEnvelopeType "GenesisUTxOSigningKey_ed25519"
-                  , teDescription = fromString "Genesis Initial UTxO Signing Key"
-                  , teRawCBOR = "X \vl1~\182\201v(\152\250A\202\157h0\ETX\248h\153\171\SI/m\186\242D\228\NAK\182(&\162"})
-  , AddFund era wallet
+  , SetNetworkId (Testnet (NetworkMagic {unNetworkMagic = 42}))
+  , InitWallet genesisWallet
+  , InitWallet splitWallet1
+  , InitWallet splitWallet2
+  , InitWallet splitWallet3
+  , InitWallet doneWallet
+  , DefineSigningKey key skey
+  , AddFund era genesisWallet
     (TxIn "900fc5da77a0747da53f7675cbb7d149d46779346dea2f879ab811ccc72a2162" (TxIx 0))
     (Lovelace 90000000000000) key
-  , createChange 2200000000000 10
-  , createChange 70000000000 300
-  , createChange 2300000000 9000
-  , RunBenchmark era wallet
-    submitMode
-    (ThreadName "walletBasedBenchmark") extraArgs Nothing (TPSRate 10.0)
+  , createChange genesisWallet splitWallet1 1 10
+  , createChange splitWallet1 splitWallet2 10 30 -- 10 TXs with 30 outputs -> in total 300 outputs
+  , createChange splitWallet2 splitWallet3 300 30
+{-
+  , createChange genesisWallet splitWallet3 1 10
+  -- Fifo implementation should also work fine when sourceWallet==destWallet
+  , createChange splitWallet3 splitWallet3 10 30
+  , createChange splitWallet3 splitWallet3 300 30
+-}
+
+  , Submit era submitMode txParams $ Take 4000 $ Cycle
+      $ NtoM splitWallet3 (PayToAddr key doneWallet) 2 2 Nothing Nothing
   ]
   where
+    skey = fromRight (error "could not parse hardcoded signing key") $
+      parseSigningKeyTE $
+        TextEnvelope {
+            teType = TextEnvelopeType "GenesisUTxOSigningKey_ed25519"
+          , teDescription = fromString "Genesis Initial UTxO Signing Key"
+          , teRawCBOR = "X \vl1~\182\201v(\152\250A\202\157h0\ETX\248h\153\171\SI/m\186\242D\228\NAK\182(&\162"
+          }
     era = AnyCardanoEra AllegraEra
-    wallet = WalletName "test-wallet"
-    key = KeyName "pass-partout"
-    payMode = PayToAddr key wallet
-    createChange val count
-      = CreateChange era wallet submitMode payMode payMode (Lovelace val) count
-    extraArgs = RunBenchmarkAux {
-        auxTxCount = 4000
-      , auxFee = 1000000
-      , auxOutputsPerTx = 2
-      , auxInputsPerTx = 2
-      , auxInputs = 8000
-      , auxOutputs = 8000
-      , auxMinValuePerUTxO = 10500000
-      }
+    txParams = defaultTxGenTxParams {txParamFee = 1000000}
+    genesisWallet = "genesisWallet"
+    splitWallet1 = "SplitWallet-1"
+    splitWallet2 = "SplitWallet-2"
+    splitWallet3 = "SplitWallet-3"
+    doneWallet = "doneWallet"
+    key = "pass-partout"
+    createChange :: String -> String -> Int -> Int -> Action
+    createChange src dest txCount outputs
+      = Submit era submitMode txParams $ Take txCount $ Cycle $ SplitN src (PayToAddr key dest) outputs

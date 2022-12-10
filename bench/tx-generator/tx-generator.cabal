@@ -1,5 +1,5 @@
 name:                  tx-generator
-version:               2.3
+version:               2.4
 description:           The transaction generator for cardano node
 author:                IOHK
 maintainer:            operations@iohk.io
@@ -8,9 +8,13 @@ license-files:
   LICENSE
   NOTICE
 build-type:            Simple
-cabal-version:         >= 1.10
+cabal-version:         >= 2.0
 extra-source-files:    README.md
 data-files:            data/protocol-parameters.json
+
+common project-config
+  if os(windows)
+    buildable: False
 
 library
   hs-source-dirs:      src
@@ -26,30 +30,21 @@ library
 
   exposed-modules:
                        Cardano.Benchmarking.Command
-                       Cardano.Benchmarking.Compiler                       
-                       Cardano.Benchmarking.Fifo
-                       Cardano.Benchmarking.FundSet
+                       Cardano.Benchmarking.Compiler
                        Cardano.Benchmarking.GeneratorTx
-                       Cardano.Benchmarking.GeneratorTx.Error
-                       Cardano.Benchmarking.GeneratorTx.Genesis
                        Cardano.Benchmarking.GeneratorTx.NodeToNode
-                       Cardano.Benchmarking.GeneratorTx.Tx
                        Cardano.Benchmarking.GeneratorTx.SizedMetadata
-                       Cardano.Benchmarking.GeneratorTx.Tx.Byron
                        Cardano.Benchmarking.GeneratorTx.Submission
                        Cardano.Benchmarking.GeneratorTx.SubmissionClient
-                       Cardano.Benchmarking.LogTypes                       
-                       Cardano.Benchmarking.NixOptions
+                       Cardano.Benchmarking.LogTypes
                        Cardano.Benchmarking.OuroborosImports
                        Cardano.Benchmarking.Script
                        Cardano.Benchmarking.Script.Action
                        Cardano.Benchmarking.Script.Aeson
                        Cardano.Benchmarking.Script.Core
                        Cardano.Benchmarking.Script.Env
-                       Cardano.Benchmarking.Script.NodeConfig                       
-                       Cardano.Benchmarking.Script.Selftest                       
-                       Cardano.Benchmarking.Script.Setters
-                       Cardano.Benchmarking.Script.Store
+                       Cardano.Benchmarking.Script.NodeConfig
+                       Cardano.Benchmarking.Script.Selftest
                        Cardano.Benchmarking.Script.Types
                        Cardano.Benchmarking.TpsThrottle
                        Cardano.Benchmarking.Tracer
@@ -58,7 +53,26 @@ library
                        Cardano.Benchmarking.Wallet
                        Cardano.Benchmarking.PlutusExample
 
-  other-modules:       Paths_tx_generator
+                       Cardano.TxGenerator.Fund
+                       Cardano.TxGenerator.FundQueue
+                       Cardano.TxGenerator.Genesis
+                       Cardano.TxGenerator.PureExample
+                       Cardano.TxGenerator.Script.Types
+                       Cardano.TxGenerator.Setup.NixService
+                       Cardano.TxGenerator.Setup.NodeConfig
+                       Cardano.TxGenerator.Setup.Plutus
+                       Cardano.TxGenerator.Setup.SigningKey
+                       Cardano.TxGenerator.Types
+                       Cardano.TxGenerator.Tx
+                       Cardano.TxGenerator.Utils
+                       Cardano.TxGenerator.UTxO
+
+                       Cardano.TxGenerator.Internal.Orphans
+
+
+  other-modules:       Cardano.TxGenerator.Internal.Fifo
+                       -- Cardano.TxGenerator.Internal.Orphans
+                       Paths_tx_generator
 
   autogen-modules:     Paths_tx_generator
 
@@ -67,6 +81,7 @@ library
                      , async
                      , attoparsec
                      , base >=4.12 && <5
+                     , base16-bytestring
                      , bytestring
                      , cardano-api
                      , cardano-binary
@@ -83,15 +98,12 @@ library
                      , cborg >= 0.2.2 && < 0.3
                      , containers
                      , constraints-extras
-                     , dependent-map
-                     , dependent-sum
-                     , dependent-sum-template
                      , dlist
                      , extra
                      , formatting
                      , generic-monoid
                      , ghc-prim
-                     , io-classes
+                     , io-classes ^>= 0.3
                      , network
                      , network-mux
                      , optparse-applicative-fork
@@ -104,15 +116,18 @@ library
                      , plutus-ledger-api
                      , random
                      , serialise
+                     , streaming
                      , strict-stm
                      , cardano-ledger-shelley
                      , stm
                      , text
                      , time
                      , trace-dispatcher
+                     , trace-forward
                      , transformers
                      , transformers-except
                      , unordered-containers
+                     , yaml
 
   default-language:    Haskell2010
   default-extensions: OverloadedStrings
@@ -140,6 +155,28 @@ executable tx-generator
   build-depends:       base >=4.12 && <5
                      , tx-generator
 
+test-suite tx-generator-apitest
+  hs-source-dirs:      test
+  main-is:             ApiTest.hs
+  type:                exitcode-stdio-1.0
+  default-language:    Haskell2010
+  ghc-options:         -threaded
+                       -Wall
+                       -rtsopts
+                       "-with-rtsopts=-T"
+
+  build-depends:       base >=4.12 && <5
+                     , aeson
+                     , bytestring
+                     , filepath
+                     , optparse-applicative-fork
+                     , cardano-api
+                     , cardano-cli
+                     , cardano-node
+                     , transformers
+                     , transformers-except
+                     , tx-generator
+                     
 test-suite tx-generator-test
   hs-source-dirs:       test
   main-is:              Main.hs

@@ -7,6 +7,7 @@
 	1. __Client__
 		1. [AcknowledgedFetchRequest](#blockfetchclientacknowledgedfetchrequest)
 		1. [AddedFetchRequest](#blockfetchclientaddedfetchrequest)
+		1. [ClientMetrics](#blockfetchclientclientmetrics)
 		1. [ClientTerminating](#blockfetchclientclientterminating)
 		1. [CompletedBlockFetch](#blockfetchclientcompletedblockfetch)
 		1. [CompletedFetchBatch](#blockfetchclientcompletedfetchbatch)
@@ -240,7 +241,7 @@
 		1. [NodeNotLeader](#forgeloopnodenotleader)
 		1. [SlotIsImmutable](#forgeloopslotisimmutable)
 		1. [StartLeadershipCheck](#forgeloopstartleadershipcheck)
-		1. [StartLeadershipCheckPlus](#forgeloopstartleadershipcheckplus)
+		1. [StartLeadershipCheck](#forgeloopstartleadershipcheck)
 	1. [Stats](#forgestats)
 1. __Mempool__
 	1. [AddedTx](#mempooladdedtx)
@@ -701,6 +702,14 @@
 1. __BlockFetch__
 	1. [BlocksServed](#blockfetchblocksserved)
 	1. [ConnectedPeers](#blockfetchconnectedpeers)
+1. __Blockfetch__
+	1. __Client__
+		1. [Blockdelay](#blockfetchclientblockdelay)
+		1. __Blockdelay__
+			1. [cdfFive](#blockfetchclientblockdelaycdffive)
+			1. [cdfOne](#blockfetchclientblockdelaycdfone)
+			1. [cdfThree](#blockfetchclientblockdelaycdfthree)
+		1. [Blocksize](#blockfetchclientblocksize)
 1. __ChainDB__
 	1. [BlockReplayProgress](#chaindbblockreplayprogress)
 	1. [Blocks](#chaindbblocks)
@@ -710,6 +719,8 @@
 	1. [Slots](#chaindbslots)
 1. __ChainSync__
 	1. [HeadersServed](#chainsyncheadersserved)
+	1. __HeadersServed__
+		1. [Falling](#chainsyncheadersservedfalling)
 1. __Forge__
 	1. [AboutToLeadSlotLast](#forgeabouttoleadslotlast)
 	1. [AdoptedOwnBlockSlotLast](#forgeadoptedownblockslotlast)
@@ -817,6 +828,19 @@ Backends:
 			`Forwarder`
 Filtered  by config value: `Notice`
 
+### BlockFetch.Client.ClientMetrics
+
+
+
+
+From current configuration:
+Details:   `DNormal`
+Backends:
+			`EKGBackend`,
+			`Stdout MachineFormat`,
+			`Forwarder`
+Filtered  by config value: `Notice`
+
 ### BlockFetch.Client.ClientTerminating
 
 
@@ -844,6 +868,7 @@ Backends:
 			`Stdout MachineFormat`,
 			`Forwarder`
 Filtered  by config value: `Notice`
+Limiters: Limiter `BlockFetch.Client.CompletedBlockFetch` with frequency `2.0`
 
 ### BlockFetch.Client.CompletedFetchBatch
 
@@ -913,7 +938,7 @@ Backends:
 			`EKGBackend`,
 			`Stdout MachineFormat`,
 			`Forwarder`
-Filtered  by config value: `Notice`
+Filtered  by config value: `Info`
 
 ### BlockFetch.Remote.Receive.BatchDone
 
@@ -2522,7 +2547,8 @@ Backends:
 			`EKGBackend`,
 			`Stdout MachineFormat`,
 			`Forwarder`
-Filtered  by config value: `Notice`
+Filtered  by config value: `Info`
+Limiters: Limiter `ChainSync.Client.DownloadedHeader` with frequency `2.0`
 
 ### ChainSync.Client.Exception
 
@@ -2536,7 +2562,7 @@ Backends:
 			`EKGBackend`,
 			`Stdout MachineFormat`,
 			`Forwarder`
-Filtered  by config value: `Notice`
+Filtered  by config value: `Info`
 
 ### ChainSync.Client.FoundIntersection
 
@@ -2550,7 +2576,7 @@ Backends:
 			`EKGBackend`,
 			`Stdout MachineFormat`,
 			`Forwarder`
-Filtered  by config value: `Notice`
+Filtered  by config value: `Info`
 
 ### ChainSync.Client.RolledBack
 
@@ -2564,7 +2590,7 @@ Backends:
 			`EKGBackend`,
 			`Stdout MachineFormat`,
 			`Forwarder`
-Filtered  by config value: `Notice`
+Filtered  by config value: `Info`
 
 ### ChainSync.Client.Termination
 
@@ -2578,7 +2604,7 @@ Backends:
 			`EKGBackend`,
 			`Stdout MachineFormat`,
 			`Forwarder`
-Filtered  by config value: `Notice`
+Filtered  by config value: `Info`
 
 ### ChainSync.Local.Receive.AwaitReply
 
@@ -3556,7 +3582,7 @@ Backends:
 			`Forwarder`
 Filtered  by config value: `Info`
 
-### Forge.Loop.StartLeadershipCheckPlus
+### Forge.Loop.StartLeadershipCheck
 
 
 > We adopted the block we produced, we also trace the transactions  that were adopted.
@@ -3968,7 +3994,7 @@ Backends:
 			`EKGBackend`,
 			`Stdout MachineFormat`,
 			`Forwarder`
-Filtered  by config value: `Notice`
+Filtered  by config value: `Info`
 
 ### Net.ConnectionManager.Remote.ConnectError
 
@@ -3981,7 +4007,7 @@ Backends:
 			`EKGBackend`,
 			`Stdout MachineFormat`,
 			`Forwarder`
-Filtered  by config value: `Notice`
+Filtered  by config value: `Info`
 
 ### Net.ConnectionManager.Remote.ConnectionCleanup
 
@@ -3994,7 +4020,7 @@ Backends:
 			`EKGBackend`,
 			`Stdout MachineFormat`,
 			`Forwarder`
-Filtered  by config value: `Notice`
+Filtered  by config value: `Info`
 
 ### Net.ConnectionManager.Remote.ConnectionExists
 
@@ -4007,7 +4033,7 @@ Backends:
 			`EKGBackend`,
 			`Stdout MachineFormat`,
 			`Forwarder`
-Filtered  by config value: `Notice`
+Filtered  by config value: `Info`
 
 ### Net.ConnectionManager.Remote.ConnectionFailure
 
@@ -4020,7 +4046,7 @@ Backends:
 			`EKGBackend`,
 			`Stdout MachineFormat`,
 			`Forwarder`
-Filtered  by config value: `Notice`
+Filtered  by config value: `Info`
 
 ### Net.ConnectionManager.Remote.ConnectionHandler
 
@@ -4033,7 +4059,7 @@ Backends:
 			`EKGBackend`,
 			`Stdout MachineFormat`,
 			`Forwarder`
-Filtered  by config value: `Notice`
+Filtered  by config value: `Info`
 
 ### Net.ConnectionManager.Remote.ConnectionManagerCounters
 
@@ -4046,7 +4072,7 @@ Backends:
 			`EKGBackend`,
 			`Stdout MachineFormat`,
 			`Forwarder`
-Filtered  by config value: `Notice`
+Filtered  by config value: `Info`
 
 ### Net.ConnectionManager.Remote.ConnectionNotFound
 
@@ -4059,7 +4085,7 @@ Backends:
 			`EKGBackend`,
 			`Stdout MachineFormat`,
 			`Forwarder`
-Filtered  by config value: `Notice`
+Filtered  by config value: `Info`
 
 ### Net.ConnectionManager.Remote.ConnectionTimeWait
 
@@ -4072,7 +4098,7 @@ Backends:
 			`EKGBackend`,
 			`Stdout MachineFormat`,
 			`Forwarder`
-Filtered  by config value: `Notice`
+Filtered  by config value: `Info`
 
 ### Net.ConnectionManager.Remote.ConnectionTimeWaitDone
 
@@ -4085,7 +4111,7 @@ Backends:
 			`EKGBackend`,
 			`Stdout MachineFormat`,
 			`Forwarder`
-Filtered  by config value: `Notice`
+Filtered  by config value: `Info`
 
 ### Net.ConnectionManager.Remote.ForbiddenConnection
 
@@ -4098,7 +4124,7 @@ Backends:
 			`EKGBackend`,
 			`Stdout MachineFormat`,
 			`Forwarder`
-Filtered  by config value: `Notice`
+Filtered  by config value: `Info`
 
 ### Net.ConnectionManager.Remote.ForbiddenOperation
 
@@ -4111,7 +4137,7 @@ Backends:
 			`EKGBackend`,
 			`Stdout MachineFormat`,
 			`Forwarder`
-Filtered  by config value: `Notice`
+Filtered  by config value: `Info`
 
 ### Net.ConnectionManager.Remote.ImpossibleConnection
 
@@ -4124,7 +4150,7 @@ Backends:
 			`EKGBackend`,
 			`Stdout MachineFormat`,
 			`Forwarder`
-Filtered  by config value: `Notice`
+Filtered  by config value: `Info`
 
 ### Net.ConnectionManager.Remote.IncludeConnection
 
@@ -4137,7 +4163,7 @@ Backends:
 			`EKGBackend`,
 			`Stdout MachineFormat`,
 			`Forwarder`
-Filtered  by config value: `Notice`
+Filtered  by config value: `Info`
 
 ### Net.ConnectionManager.Remote.PruneConnections
 
@@ -4150,7 +4176,7 @@ Backends:
 			`EKGBackend`,
 			`Stdout MachineFormat`,
 			`Forwarder`
-Filtered  by config value: `Notice`
+Filtered  by config value: `Info`
 
 ### Net.ConnectionManager.Remote.Shutdown
 
@@ -4163,7 +4189,7 @@ Backends:
 			`EKGBackend`,
 			`Stdout MachineFormat`,
 			`Forwarder`
-Filtered  by config value: `Notice`
+Filtered  by config value: `Info`
 
 ### Net.ConnectionManager.Remote.State
 
@@ -4176,7 +4202,7 @@ Backends:
 			`EKGBackend`,
 			`Stdout MachineFormat`,
 			`Forwarder`
-Filtered  by config value: `Notice`
+Filtered  by config value: `Info`
 
 ### Net.ConnectionManager.Remote.TerminatedConnection
 
@@ -4189,7 +4215,7 @@ Backends:
 			`EKGBackend`,
 			`Stdout MachineFormat`,
 			`Forwarder`
-Filtered  by config value: `Notice`
+Filtered  by config value: `Info`
 
 ### Net.ConnectionManager.Remote.TerminatingConnection
 
@@ -4202,7 +4228,7 @@ Backends:
 			`EKGBackend`,
 			`Stdout MachineFormat`,
 			`Forwarder`
-Filtered  by config value: `Notice`
+Filtered  by config value: `Info`
 
 ### Net.ConnectionManager.Remote.Transition.ConnectionManagerTransition
 
@@ -4215,7 +4241,7 @@ Backends:
 			`EKGBackend`,
 			`Stdout MachineFormat`,
 			`Forwarder`
-Filtered  by config value: `Notice`
+Filtered  by config value: `Info`
 
 ### Net.ConnectionManager.Remote.UnexpectedlyFalseAssertion
 
@@ -4228,7 +4254,7 @@ Backends:
 			`EKGBackend`,
 			`Stdout MachineFormat`,
 			`Forwarder`
-Filtered  by config value: `Notice`
+Filtered  by config value: `Info`
 
 ### Net.ConnectionManager.Remote.UnregisterConnection
 
@@ -4241,7 +4267,7 @@ Backends:
 			`EKGBackend`,
 			`Stdout MachineFormat`,
 			`Forwarder`
-Filtered  by config value: `Notice`
+Filtered  by config value: `Info`
 
 ### Net.DNSResolver.LookupAAAAError
 
@@ -5080,7 +5106,7 @@ Backends:
 			`EKGBackend`,
 			`Stdout MachineFormat`,
 			`Forwarder`
-Filtered  by config value: `Notice`
+Filtered  by config value: `Info`
 
 ### Net.InboundGovernor.Remote.DemotedToWarmRemote
 
@@ -5094,7 +5120,7 @@ Backends:
 			`EKGBackend`,
 			`Stdout MachineFormat`,
 			`Forwarder`
-Filtered  by config value: `Notice`
+Filtered  by config value: `Info`
 
 ### Net.InboundGovernor.Remote.InboundGovernorCounters
 
@@ -5107,7 +5133,7 @@ Backends:
 			`EKGBackend`,
 			`Stdout MachineFormat`,
 			`Forwarder`
-Filtered  by config value: `Notice`
+Filtered  by config value: `Info`
 
 ### Net.InboundGovernor.Remote.InboundGovernorError
 
@@ -5120,7 +5146,7 @@ Backends:
 			`EKGBackend`,
 			`Stdout MachineFormat`,
 			`Forwarder`
-Filtered  by config value: `Notice`
+Filtered  by config value: `Info`
 
 ### Net.InboundGovernor.Remote.MuxCleanExit
 
@@ -5133,7 +5159,7 @@ Backends:
 			`EKGBackend`,
 			`Stdout MachineFormat`,
 			`Forwarder`
-Filtered  by config value: `Notice`
+Filtered  by config value: `Info`
 
 ### Net.InboundGovernor.Remote.MuxErrored
 
@@ -5146,7 +5172,7 @@ Backends:
 			`EKGBackend`,
 			`Stdout MachineFormat`,
 			`Forwarder`
-Filtered  by config value: `Notice`
+Filtered  by config value: `Info`
 
 ### Net.InboundGovernor.Remote.NewConnection
 
@@ -5159,7 +5185,7 @@ Backends:
 			`EKGBackend`,
 			`Stdout MachineFormat`,
 			`Forwarder`
-Filtered  by config value: `Notice`
+Filtered  by config value: `Info`
 
 ### Net.InboundGovernor.Remote.PromotedToHotRemote
 
@@ -5172,7 +5198,7 @@ Backends:
 			`EKGBackend`,
 			`Stdout MachineFormat`,
 			`Forwarder`
-Filtered  by config value: `Notice`
+Filtered  by config value: `Info`
 
 ### Net.InboundGovernor.Remote.PromotedToWarmRemote
 
@@ -5185,7 +5211,7 @@ Backends:
 			`EKGBackend`,
 			`Stdout MachineFormat`,
 			`Forwarder`
-Filtered  by config value: `Notice`
+Filtered  by config value: `Info`
 
 ### Net.InboundGovernor.Remote.RemoteState
 
@@ -5198,7 +5224,7 @@ Backends:
 			`EKGBackend`,
 			`Stdout MachineFormat`,
 			`Forwarder`
-Filtered  by config value: `Notice`
+Filtered  by config value: `Info`
 
 ### Net.InboundGovernor.Remote.ResponderErrored
 
@@ -5211,7 +5237,7 @@ Backends:
 			`EKGBackend`,
 			`Stdout MachineFormat`,
 			`Forwarder`
-Filtered  by config value: `Notice`
+Filtered  by config value: `Info`
 
 ### Net.InboundGovernor.Remote.ResponderRestarted
 
@@ -5224,7 +5250,7 @@ Backends:
 			`EKGBackend`,
 			`Stdout MachineFormat`,
 			`Forwarder`
-Filtered  by config value: `Notice`
+Filtered  by config value: `Info`
 
 ### Net.InboundGovernor.Remote.ResponderStartFailure
 
@@ -5237,7 +5263,7 @@ Backends:
 			`EKGBackend`,
 			`Stdout MachineFormat`,
 			`Forwarder`
-Filtered  by config value: `Notice`
+Filtered  by config value: `Info`
 
 ### Net.InboundGovernor.Remote.ResponderStarted
 
@@ -5250,7 +5276,7 @@ Backends:
 			`EKGBackend`,
 			`Stdout MachineFormat`,
 			`Forwarder`
-Filtered  by config value: `Notice`
+Filtered  by config value: `Info`
 
 ### Net.InboundGovernor.Remote.ResponderTerminated
 
@@ -5263,7 +5289,7 @@ Backends:
 			`EKGBackend`,
 			`Stdout MachineFormat`,
 			`Forwarder`
-Filtered  by config value: `Notice`
+Filtered  by config value: `Info`
 
 ### Net.InboundGovernor.Remote.Transition.InboundGovernorTransition
 
@@ -5276,7 +5302,7 @@ Backends:
 			`EKGBackend`,
 			`Stdout MachineFormat`,
 			`Forwarder`
-Filtered  by config value: `Notice`
+Filtered  by config value: `Info`
 
 ### Net.InboundGovernor.Remote.UnexpectedlyFalseAssertion
 
@@ -5289,7 +5315,7 @@ Backends:
 			`EKGBackend`,
 			`Stdout MachineFormat`,
 			`Forwarder`
-Filtered  by config value: `Notice`
+Filtered  by config value: `Info`
 
 ### Net.InboundGovernor.Remote.WaitIdleRemote
 
@@ -5302,7 +5328,7 @@ Backends:
 			`EKGBackend`,
 			`Stdout MachineFormat`,
 			`Forwarder`
-Filtered  by config value: `Notice`
+Filtered  by config value: `Info`
 
 ### Net.KeepAliveClient
 
@@ -5721,7 +5747,7 @@ Backends:
 			`EKGBackend`,
 			`Stdout MachineFormat`,
 			`Forwarder`
-Filtered  by config value: `Notice`
+Filtered  by config value: `Info`
 
 ### Net.Mux.Remote.ChannelRecvStart
 
@@ -5735,7 +5761,7 @@ Backends:
 			`EKGBackend`,
 			`Stdout MachineFormat`,
 			`Forwarder`
-Filtered  by config value: `Notice`
+Filtered  by config value: `Info`
 
 ### Net.Mux.Remote.ChannelSendEnd
 
@@ -5749,7 +5775,7 @@ Backends:
 			`EKGBackend`,
 			`Stdout MachineFormat`,
 			`Forwarder`
-Filtered  by config value: `Notice`
+Filtered  by config value: `Info`
 
 ### Net.Mux.Remote.ChannelSendStart
 
@@ -5763,7 +5789,7 @@ Backends:
 			`EKGBackend`,
 			`Stdout MachineFormat`,
 			`Forwarder`
-Filtered  by config value: `Notice`
+Filtered  by config value: `Info`
 
 ### Net.Mux.Remote.CleanExit
 
@@ -5777,7 +5803,7 @@ Backends:
 			`EKGBackend`,
 			`Stdout MachineFormat`,
 			`Forwarder`
-Filtered  by config value: `Notice`
+Filtered  by config value: `Info`
 
 ### Net.Mux.Remote.ExceptionExit
 
@@ -5791,7 +5817,7 @@ Backends:
 			`EKGBackend`,
 			`Stdout MachineFormat`,
 			`Forwarder`
-Filtered  by config value: `Notice`
+Filtered  by config value: `Info`
 
 ### Net.Mux.Remote.HandshakeClientEnd
 
@@ -5805,7 +5831,7 @@ Backends:
 			`EKGBackend`,
 			`Stdout MachineFormat`,
 			`Forwarder`
-Filtered  by config value: `Notice`
+Filtered  by config value: `Info`
 
 ### Net.Mux.Remote.HandshakeClientError
 
@@ -5819,7 +5845,7 @@ Backends:
 			`EKGBackend`,
 			`Stdout MachineFormat`,
 			`Forwarder`
-Filtered  by config value: `Notice`
+Filtered  by config value: `Info`
 
 ### Net.Mux.Remote.HandshakeServerEnd
 
@@ -5833,7 +5859,7 @@ Backends:
 			`EKGBackend`,
 			`Stdout MachineFormat`,
 			`Forwarder`
-Filtered  by config value: `Notice`
+Filtered  by config value: `Info`
 
 ### Net.Mux.Remote.HandshakeServerError
 
@@ -5847,7 +5873,7 @@ Backends:
 			`EKGBackend`,
 			`Stdout MachineFormat`,
 			`Forwarder`
-Filtered  by config value: `Notice`
+Filtered  by config value: `Info`
 
 ### Net.Mux.Remote.HandshakeStart
 
@@ -5861,7 +5887,7 @@ Backends:
 			`EKGBackend`,
 			`Stdout MachineFormat`,
 			`Forwarder`
-Filtered  by config value: `Notice`
+Filtered  by config value: `Info`
 
 ### Net.Mux.Remote.RecvDeltaQObservation
 
@@ -5875,7 +5901,7 @@ Backends:
 			`EKGBackend`,
 			`Stdout MachineFormat`,
 			`Forwarder`
-Filtered  by config value: `Notice`
+Filtered  by config value: `Info`
 
 ### Net.Mux.Remote.RecvDeltaQSample
 
@@ -5889,7 +5915,7 @@ Backends:
 			`EKGBackend`,
 			`Stdout MachineFormat`,
 			`Forwarder`
-Filtered  by config value: `Notice`
+Filtered  by config value: `Info`
 
 ### Net.Mux.Remote.RecvEnd
 
@@ -5903,7 +5929,7 @@ Backends:
 			`EKGBackend`,
 			`Stdout MachineFormat`,
 			`Forwarder`
-Filtered  by config value: `Notice`
+Filtered  by config value: `Info`
 
 ### Net.Mux.Remote.RecvHeaderEnd
 
@@ -5917,7 +5943,7 @@ Backends:
 			`EKGBackend`,
 			`Stdout MachineFormat`,
 			`Forwarder`
-Filtered  by config value: `Notice`
+Filtered  by config value: `Info`
 
 ### Net.Mux.Remote.RecvHeaderStart
 
@@ -5931,7 +5957,7 @@ Backends:
 			`EKGBackend`,
 			`Stdout MachineFormat`,
 			`Forwarder`
-Filtered  by config value: `Notice`
+Filtered  by config value: `Info`
 
 ### Net.Mux.Remote.RecvStart
 
@@ -5945,7 +5971,7 @@ Backends:
 			`EKGBackend`,
 			`Stdout MachineFormat`,
 			`Forwarder`
-Filtered  by config value: `Notice`
+Filtered  by config value: `Info`
 
 ### Net.Mux.Remote.SDUReadTimeoutException
 
@@ -5959,7 +5985,7 @@ Backends:
 			`EKGBackend`,
 			`Stdout MachineFormat`,
 			`Forwarder`
-Filtered  by config value: `Notice`
+Filtered  by config value: `Info`
 
 ### Net.Mux.Remote.SDUWriteTimeoutException
 
@@ -5973,7 +5999,7 @@ Backends:
 			`EKGBackend`,
 			`Stdout MachineFormat`,
 			`Forwarder`
-Filtered  by config value: `Notice`
+Filtered  by config value: `Info`
 
 ### Net.Mux.Remote.SendEnd
 
@@ -5987,7 +6013,7 @@ Backends:
 			`EKGBackend`,
 			`Stdout MachineFormat`,
 			`Forwarder`
-Filtered  by config value: `Notice`
+Filtered  by config value: `Info`
 
 ### Net.Mux.Remote.SendStart
 
@@ -6001,7 +6027,7 @@ Backends:
 			`EKGBackend`,
 			`Stdout MachineFormat`,
 			`Forwarder`
-Filtered  by config value: `Notice`
+Filtered  by config value: `Info`
 
 ### Net.Mux.Remote.Shutdown
 
@@ -6015,7 +6041,7 @@ Backends:
 			`EKGBackend`,
 			`Stdout MachineFormat`,
 			`Forwarder`
-Filtered  by config value: `Notice`
+Filtered  by config value: `Info`
 
 ### Net.Mux.Remote.StartEagerly
 
@@ -6029,7 +6055,7 @@ Backends:
 			`EKGBackend`,
 			`Stdout MachineFormat`,
 			`Forwarder`
-Filtered  by config value: `Notice`
+Filtered  by config value: `Info`
 
 ### Net.Mux.Remote.StartOnDemand
 
@@ -6043,7 +6069,7 @@ Backends:
 			`EKGBackend`,
 			`Stdout MachineFormat`,
 			`Forwarder`
-Filtered  by config value: `Notice`
+Filtered  by config value: `Info`
 
 ### Net.Mux.Remote.StartedOnDemand
 
@@ -6057,7 +6083,7 @@ Backends:
 			`EKGBackend`,
 			`Stdout MachineFormat`,
 			`Forwarder`
-Filtered  by config value: `Notice`
+Filtered  by config value: `Info`
 
 ### Net.Mux.Remote.State
 
@@ -6071,7 +6097,7 @@ Backends:
 			`EKGBackend`,
 			`Stdout MachineFormat`,
 			`Forwarder`
-Filtered  by config value: `Notice`
+Filtered  by config value: `Info`
 
 ### Net.Mux.Remote.TCPInfo
 
@@ -6085,7 +6111,7 @@ Backends:
 			`EKGBackend`,
 			`Stdout MachineFormat`,
 			`Forwarder`
-Filtered  by config value: `Notice`
+Filtered  by config value: `Info`
 
 ### Net.Mux.Remote.Terminating
 
@@ -6099,7 +6125,7 @@ Backends:
 			`EKGBackend`,
 			`Stdout MachineFormat`,
 			`Forwarder`
-Filtered  by config value: `Notice`
+Filtered  by config value: `Info`
 
 ### Net.PeerSelection.Actions.MonitoringError
 
@@ -6112,7 +6138,7 @@ Backends:
 			`EKGBackend`,
 			`Stdout MachineFormat`,
 			`Forwarder`
-Filtered  by config value: `Notice`
+Filtered  by config value: `Info`
 
 ### Net.PeerSelection.Actions.MonitoringResult
 
@@ -6125,7 +6151,7 @@ Backends:
 			`EKGBackend`,
 			`Stdout MachineFormat`,
 			`Forwarder`
-Filtered  by config value: `Notice`
+Filtered  by config value: `Info`
 
 ### Net.PeerSelection.Actions.StatusChangeFailure
 
@@ -6138,7 +6164,7 @@ Backends:
 			`EKGBackend`,
 			`Stdout MachineFormat`,
 			`Forwarder`
-Filtered  by config value: `Notice`
+Filtered  by config value: `Info`
 
 ### Net.PeerSelection.Actions.StatusChanged
 
@@ -6151,7 +6177,7 @@ Backends:
 			`EKGBackend`,
 			`Stdout MachineFormat`,
 			`Forwarder`
-Filtered  by config value: `Notice`
+Filtered  by config value: `Info`
 
 ### Net.PeerSelection.Counters
 
@@ -6165,7 +6191,7 @@ Backends:
 			`EKGBackend`,
 			`Stdout MachineFormat`,
 			`Forwarder`
-Filtered  by config value: `Notice`
+Filtered  by config value: `Info`
 
 ### Net.PeerSelection.Initiator.GovernorState
 
@@ -6178,7 +6204,7 @@ Backends:
 			`EKGBackend`,
 			`Stdout MachineFormat`,
 			`Forwarder`
-Filtered  by config value: `Notice`
+Filtered  by config value: `Info`
 
 ### Net.PeerSelection.Responder.GovernorState
 
@@ -6191,7 +6217,7 @@ Backends:
 			`EKGBackend`,
 			`Stdout MachineFormat`,
 			`Forwarder`
-Filtered  by config value: `Notice`
+Filtered  by config value: `Info`
 
 ### Net.PeerSelection.Selection.ChurnMode
 
@@ -6204,7 +6230,7 @@ Backends:
 			`EKGBackend`,
 			`Stdout MachineFormat`,
 			`Forwarder`
-Filtered  by config value: `Notice`
+Filtered  by config value: `Info`
 
 ### Net.PeerSelection.Selection.ChurnWait
 
@@ -6217,7 +6243,7 @@ Backends:
 			`EKGBackend`,
 			`Stdout MachineFormat`,
 			`Forwarder`
-Filtered  by config value: `Notice`
+Filtered  by config value: `Info`
 
 ### Net.PeerSelection.Selection.DemoteAsynchronous
 
@@ -6230,7 +6256,7 @@ Backends:
 			`EKGBackend`,
 			`Stdout MachineFormat`,
 			`Forwarder`
-Filtered  by config value: `Notice`
+Filtered  by config value: `Info`
 
 ### Net.PeerSelection.Selection.DemoteHotDone
 
@@ -6244,7 +6270,7 @@ Backends:
 			`EKGBackend`,
 			`Stdout MachineFormat`,
 			`Forwarder`
-Filtered  by config value: `Notice`
+Filtered  by config value: `Info`
 
 ### Net.PeerSelection.Selection.DemoteHotFailed
 
@@ -6258,7 +6284,7 @@ Backends:
 			`EKGBackend`,
 			`Stdout MachineFormat`,
 			`Forwarder`
-Filtered  by config value: `Notice`
+Filtered  by config value: `Info`
 
 ### Net.PeerSelection.Selection.DemoteHotPeers
 
@@ -6272,7 +6298,7 @@ Backends:
 			`EKGBackend`,
 			`Stdout MachineFormat`,
 			`Forwarder`
-Filtered  by config value: `Notice`
+Filtered  by config value: `Info`
 
 ### Net.PeerSelection.Selection.DemoteLocalHotPeers
 
@@ -6286,7 +6312,7 @@ Backends:
 			`EKGBackend`,
 			`Stdout MachineFormat`,
 			`Forwarder`
-Filtered  by config value: `Notice`
+Filtered  by config value: `Info`
 
 ### Net.PeerSelection.Selection.DemoteWarmDone
 
@@ -6300,7 +6326,7 @@ Backends:
 			`EKGBackend`,
 			`Stdout MachineFormat`,
 			`Forwarder`
-Filtered  by config value: `Notice`
+Filtered  by config value: `Info`
 
 ### Net.PeerSelection.Selection.DemoteWarmFailed
 
@@ -6314,7 +6340,7 @@ Backends:
 			`EKGBackend`,
 			`Stdout MachineFormat`,
 			`Forwarder`
-Filtered  by config value: `Notice`
+Filtered  by config value: `Info`
 
 ### Net.PeerSelection.Selection.DemoteWarmPeers
 
@@ -6328,7 +6354,7 @@ Backends:
 			`EKGBackend`,
 			`Stdout MachineFormat`,
 			`Forwarder`
-Filtered  by config value: `Notice`
+Filtered  by config value: `Info`
 
 ### Net.PeerSelection.Selection.ForgetColdPeers
 
@@ -6342,7 +6368,7 @@ Backends:
 			`EKGBackend`,
 			`Stdout MachineFormat`,
 			`Forwarder`
-Filtered  by config value: `Notice`
+Filtered  by config value: `Info`
 
 ### Net.PeerSelection.Selection.GossipRequests
 
@@ -6356,7 +6382,7 @@ Backends:
 			`EKGBackend`,
 			`Stdout MachineFormat`,
 			`Forwarder`
-Filtered  by config value: `Notice`
+Filtered  by config value: `Info`
 
 ### Net.PeerSelection.Selection.GossipResults
 
@@ -6369,7 +6395,7 @@ Backends:
 			`EKGBackend`,
 			`Stdout MachineFormat`,
 			`Forwarder`
-Filtered  by config value: `Notice`
+Filtered  by config value: `Info`
 
 ### Net.PeerSelection.Selection.GovernorWakeup
 
@@ -6382,7 +6408,7 @@ Backends:
 			`EKGBackend`,
 			`Stdout MachineFormat`,
 			`Forwarder`
-Filtered  by config value: `Notice`
+Filtered  by config value: `Info`
 
 ### Net.PeerSelection.Selection.LocalRootPeersChanged
 
@@ -6395,7 +6421,7 @@ Backends:
 			`EKGBackend`,
 			`Stdout MachineFormat`,
 			`Forwarder`
-Filtered  by config value: `Notice`
+Filtered  by config value: `Info`
 
 ### Net.PeerSelection.Selection.PromoteColdDone
 
@@ -6409,7 +6435,7 @@ Backends:
 			`EKGBackend`,
 			`Stdout MachineFormat`,
 			`Forwarder`
-Filtered  by config value: `Notice`
+Filtered  by config value: `Info`
 
 ### Net.PeerSelection.Selection.PromoteColdFailed
 
@@ -6423,7 +6449,7 @@ Backends:
 			`EKGBackend`,
 			`Stdout MachineFormat`,
 			`Forwarder`
-Filtered  by config value: `Notice`
+Filtered  by config value: `Info`
 
 ### Net.PeerSelection.Selection.PromoteColdLocalPeers
 
@@ -6437,7 +6463,7 @@ Backends:
 			`EKGBackend`,
 			`Stdout MachineFormat`,
 			`Forwarder`
-Filtered  by config value: `Notice`
+Filtered  by config value: `Info`
 
 ### Net.PeerSelection.Selection.PromoteColdPeers
 
@@ -6451,7 +6477,7 @@ Backends:
 			`EKGBackend`,
 			`Stdout MachineFormat`,
 			`Forwarder`
-Filtered  by config value: `Notice`
+Filtered  by config value: `Info`
 
 ### Net.PeerSelection.Selection.PromoteWarmAborted
 
@@ -6464,7 +6490,7 @@ Backends:
 			`EKGBackend`,
 			`Stdout MachineFormat`,
 			`Forwarder`
-Filtered  by config value: `Notice`
+Filtered  by config value: `Info`
 
 ### Net.PeerSelection.Selection.PromoteWarmDone
 
@@ -6478,7 +6504,7 @@ Backends:
 			`EKGBackend`,
 			`Stdout MachineFormat`,
 			`Forwarder`
-Filtered  by config value: `Notice`
+Filtered  by config value: `Info`
 
 ### Net.PeerSelection.Selection.PromoteWarmFailed
 
@@ -6492,7 +6518,7 @@ Backends:
 			`EKGBackend`,
 			`Stdout MachineFormat`,
 			`Forwarder`
-Filtered  by config value: `Notice`
+Filtered  by config value: `Info`
 
 ### Net.PeerSelection.Selection.PromoteWarmLocalPeers
 
@@ -6506,7 +6532,7 @@ Backends:
 			`EKGBackend`,
 			`Stdout MachineFormat`,
 			`Forwarder`
-Filtered  by config value: `Notice`
+Filtered  by config value: `Info`
 
 ### Net.PeerSelection.Selection.PromoteWarmPeers
 
@@ -6520,7 +6546,7 @@ Backends:
 			`EKGBackend`,
 			`Stdout MachineFormat`,
 			`Forwarder`
-Filtered  by config value: `Notice`
+Filtered  by config value: `Info`
 
 ### Net.PeerSelection.Selection.PublicRootsFailure
 
@@ -6533,7 +6559,7 @@ Backends:
 			`EKGBackend`,
 			`Stdout MachineFormat`,
 			`Forwarder`
-Filtered  by config value: `Notice`
+Filtered  by config value: `Info`
 
 ### Net.PeerSelection.Selection.PublicRootsRequest
 
@@ -6546,7 +6572,7 @@ Backends:
 			`EKGBackend`,
 			`Stdout MachineFormat`,
 			`Forwarder`
-Filtered  by config value: `Notice`
+Filtered  by config value: `Info`
 
 ### Net.PeerSelection.Selection.PublicRootsResults
 
@@ -6559,7 +6585,7 @@ Backends:
 			`EKGBackend`,
 			`Stdout MachineFormat`,
 			`Forwarder`
-Filtered  by config value: `Notice`
+Filtered  by config value: `Info`
 
 ### Net.PeerSelection.Selection.TargetsChanged
 
@@ -6572,7 +6598,7 @@ Backends:
 			`EKGBackend`,
 			`Stdout MachineFormat`,
 			`Forwarder`
-Filtered  by config value: `Notice`
+Filtered  by config value: `Info`
 
 ### Net.Peers.Ledger.DisabledLedgerPeers
 
@@ -9043,6 +9069,41 @@ BlockFetch.Server.SendBlock
 Dispatched by: 
 BlockFetch.Decision
 
+### Blockfetch.Client.Blockdelay
+
+
+
+Dispatched by: 
+BlockFetch.Client.ClientMetrics
+
+### Blockfetch.Client.Blockdelay.cdfFive
+
+
+
+Dispatched by: 
+BlockFetch.Client.ClientMetrics
+
+### Blockfetch.Client.Blockdelay.cdfOne
+
+
+
+Dispatched by: 
+BlockFetch.Client.ClientMetrics
+
+### Blockfetch.Client.Blockdelay.cdfThree
+
+
+
+Dispatched by: 
+BlockFetch.Client.ClientMetrics
+
+### Blockfetch.Client.Blocksize
+
+
+
+Dispatched by: 
+BlockFetch.Client.ClientMetrics
+
 ### ChainDB.BlockReplayProgress
 
 > Progress in percent
@@ -9098,7 +9159,15 @@ ChainDB.AddBlockEvent.SwitchedToAFork
 
 ### ChainSync.HeadersServed
 
-> A counter triggered only on header event
+> A counter triggered on any header event
+
+
+Dispatched by: 
+ChainSync.ServerHeader.Update
+
+### ChainSync.HeadersServed.Falling
+
+> A counter triggered only on header event with falling edge
 
 
 Dispatched by: 
@@ -9110,7 +9179,6 @@ ChainSync.ServerHeader.Update
 
 Dispatched by: 
 Forge.Loop.StartLeadershipCheck
-Forge.Loop.StartLeadershipCheckPlus
 
 ### Forge.AdoptedOwnBlockSlotLast
 
@@ -9161,7 +9229,7 @@ Forge.Loop.ForgeStateUpdateError
 
 
 Dispatched by: 
-Forge.Loop.StartLeadershipCheckPlus
+Forge.Loop.StartLeadershipCheck
 
 ### Forge.ForgedInvalidSlotLast
 
@@ -9283,7 +9351,7 @@ Forge.Stats
 
 
 Dispatched by: 
-Forge.Loop.StartLeadershipCheckPlus
+Forge.Loop.StartLeadershipCheck
 
 ### Mempool.MempoolBytes
 
@@ -9573,7 +9641,7 @@ TxSubmission.TxInbound.Collected
 >  _suiSlotsPerKESPeriod_: KES period length, in slots.
 
 
-Configuration: TraceConfig {tcOptions = fromList [([],[ConfSeverity {severity = Notice},ConfDetail {detail = DNormal},ConfBackend {backends = [Stdout MachineFormat,EKGBackend,Forwarder]}]),(["AcceptPolicy"],[ConfSeverity {severity = Info}]),(["BlockFetchClient","CompletedBlockFetch"],[ConfLimiter {maxFrequency = 2.0}]),(["ChainDB"],[ConfSeverity {severity = Info}]),(["ChainDB","AddBlockEvent","AddBlockValidation","ValidCandidate"],[ConfLimiter {maxFrequency = 2.0}]),(["ChainDB","AddBlockEvent","AddedBlockToQueue"],[ConfLimiter {maxFrequency = 2.0}]),(["ChainDB","AddBlockEvent","AddedBlockToVolatileDB"],[ConfLimiter {maxFrequency = 2.0}]),(["ChainDB","CopyToImmutableDBEvent","CopiedBlockToImmutableDB"],[ConfLimiter {maxFrequency = 2.0}]),(["DNSResolver"],[ConfSeverity {severity = Info}]),(["DNSSubscription"],[ConfSeverity {severity = Info}]),(["DiffusionInit"],[ConfSeverity {severity = Info}]),(["ErrorPolicy"],[ConfSeverity {severity = Info}]),(["Forge"],[ConfSeverity {severity = Info}]),(["IpSubscription"],[ConfSeverity {severity = Info}]),(["LocalErrorPolicy"],[ConfSeverity {severity = Info}]),(["Mempool"],[ConfSeverity {severity = Info}]),(["Resources"],[ConfSeverity {severity = Info}])], tcForwarder = TraceOptionForwarder {tofConnQueueSize = 2000, tofDisconnQueueSize = 200000, tofVerbosity = Minimum}, tcNodeName = Nothing, tcPeerFrequency = Just 2000, tcResourceFrequency = Just 5000}
+Configuration: TraceConfig {tcOptions = fromList [([],[ConfSeverity {severity = Notice},ConfDetail {detail = DNormal},ConfBackend {backends = [Stdout MachineFormat,EKGBackend,Forwarder]}]),(["BlockFetch","Client","CompletedBlockFetch"],[ConfLimiter {maxFrequency = 2.0}]),(["BlockFetch","Decision"],[ConfSeverity {severity = Info}]),(["ChainDB"],[ConfSeverity {severity = Info}]),(["ChainDB","AddBlockEvent","AddBlockValidation","ValidCandidate"],[ConfLimiter {maxFrequency = 2.0}]),(["ChainDB","AddBlockEvent","AddedBlockToQueue"],[ConfLimiter {maxFrequency = 2.0}]),(["ChainDB","AddBlockEvent","AddedBlockToVolatileDB"],[ConfLimiter {maxFrequency = 2.0}]),(["ChainDB","CopyToImmutableDBEvent","CopiedBlockToImmutableDB"],[ConfLimiter {maxFrequency = 2.0}]),(["ChainSync","Client"],[ConfSeverity {severity = Info}]),(["ChainSync","Client","DownloadedHeader"],[ConfLimiter {maxFrequency = 2.0}]),(["DNSSubscription"],[ConfSeverity {severity = Info}]),(["DiffusionInit"],[ConfSeverity {severity = Info}]),(["ErrorPolicy"],[ConfSeverity {severity = Info}]),(["Forge"],[ConfSeverity {severity = Info}]),(["IpSubscription"],[ConfSeverity {severity = Info}]),(["LocalErrorPolicy"],[ConfSeverity {severity = Info}]),(["Mempool"],[ConfSeverity {severity = Info}]),(["Net","ConnectionManager","Remote"],[ConfSeverity {severity = Info}]),(["Net","InboundGovernor","Remote"],[ConfSeverity {severity = Info}]),(["Net","Mux","Remote"],[ConfSeverity {severity = Info}]),(["Net","PeerSelection"],[ConfSeverity {severity = Info}]),(["Resources"],[ConfSeverity {severity = Info}])], tcForwarder = TraceOptionForwarder {tofConnQueueSize = 2000, tofDisconnQueueSize = 200000, tofVerbosity = Minimum}, tcNodeName = Nothing, tcPeerFrequency = Just 3000, tcResourceFrequency = Just 4000}
 
-663 log messages.
-Generated at 2022-07-11 10:20:06.282523 AEST.
+670 log messages.
+Generated at 2022-11-01 13:30:29.099431258 CET.

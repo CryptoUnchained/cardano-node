@@ -24,6 +24,7 @@ module Cardano.Api.Script (
     PlutusScriptVersion(..),
     AnyScriptLanguage(..),
     AnyPlutusScriptVersion(..),
+    IsPlutusScriptLanguage(..),
     IsScriptLanguage(..),
     IsSimpleScriptLanguage(..),
 
@@ -142,7 +143,6 @@ import           Cardano.Slotting.Slot (SlotNo)
 
 import           Cardano.Ledger.BaseTypes (StrictMaybe (..))
 import qualified Cardano.Ledger.Core as Ledger
-import qualified Cardano.Ledger.Era as Ledger
 
 import qualified Cardano.Ledger.Keys as Shelley
 import qualified Cardano.Ledger.Shelley.Scripts as Shelley
@@ -1073,7 +1073,7 @@ instance HasTypeProxy lang => HasTypeProxy (PlutusScript lang) where
     data AsType (PlutusScript lang) = AsPlutusScript (AsType lang)
     proxyToAsType _ = AsPlutusScript (proxyToAsType (Proxy :: Proxy lang))
 
-instance HasTypeProxy lang => SerialiseAsRawBytes (PlutusScript lang) where
+instance (HasTypeProxy lang, Typeable lang) => SerialiseAsRawBytes (PlutusScript lang) where
     serialiseToRawBytes (PlutusScriptSerialised sbs) = SBS.fromShort sbs
 
     deserialiseFromRawBytes (AsPlutusScript _) bs =

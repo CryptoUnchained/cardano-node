@@ -23,7 +23,7 @@ import           Cardano.Node.Tracing.Tracers.BlockReplayProgress
 import           Cardano.Node.Tracing.Tracers.ChainDB
 import           Cardano.Node.Tracing.Tracers.Consensus
 import           Cardano.Node.Tracing.Tracers.Diffusion
-import           Cardano.Node.Tracing.Tracers.ForgingThreadStats (forgeThreadStats)
+import           Cardano.Node.Tracing.Tracers.ForgingThreadStats (docForgeStats, forgeThreadStats)
 import           Cardano.Node.Tracing.Tracers.KESInfo
 import           Cardano.Node.Tracing.Tracers.NodeToClient
 import           Cardano.Node.Tracing.Tracers.NodeToNode
@@ -139,7 +139,7 @@ mkDispatchTracers nodeKernel trBase trForward mbTrEKG trDataPoint trConfig enabl
                 trBase trForward mbTrEKG
                 ["Startup"]
                 namesStartupInfo
-                (const Notice)
+                severityStartupTracer
                 allPublic
     configureTracers trConfig docStartupInfo [startupTr]
 
@@ -265,7 +265,7 @@ mkConsensusTracers trBase trForward mbTrEKG _trDataPoint trConfig nodeKernel = d
            contramap
               (const
                 (FormattedMetrics
-                  [CounterM "cardano.node.metrics.served.header" Nothing]))
+                  [CounterM "ChainSync.HeadersServed" Nothing]))
               (mkMetricsTracer mbTrEKG)
 
     chainSyncServerBlockTr <- mkCardanoTracer
@@ -352,11 +352,12 @@ mkConsensusTracers trBase trForward mbTrEKG _trDataPoint trConfig nodeKernel = d
     forgeThreadStatsTr <- mkCardanoTracer'
                 trBase trForward mbTrEKG
                 ["Forge", "Stats"]
-                namesForForge
-                severityForge
+                namesForForge2
+                severityForge2
                 allPublic
                 forgeThreadStats
-    configureTracers trConfig docForge [forgeTr, forgeThreadStatsTr]
+    configureTracers trConfig docForge [forgeTr]
+    configureTracers trConfig docForgeStats [forgeThreadStatsTr]
     blockchainTimeTr   <- mkCardanoTracer
                 trBase trForward mbTrEKG
                 ["BlockchainTime"]
@@ -371,6 +372,13 @@ mkConsensusTracers trBase trForward mbTrEKG _trDataPoint trConfig nodeKernel = d
                 severityKeepAliveClient
                 allPublic
     configureTracers trConfig docKeepAliveClient [keepAliveClientTr]
+    consensusStartupErrorTr <- mkCardanoTracer
+                trBase trForward mbTrEKG
+                ["Consensus", "Startup"]
+                namesConsensusStartupError
+                severityConsensusStartupError
+                allPublic
+    configureTracers trConfig docConsensusStartupError [consensusStartupErrorTr]
     pure $ Consensus.Tracers
       { Consensus.chainSyncClientTracer = Tracer $
           traceWith chainSyncClientTr
@@ -404,6 +412,8 @@ mkConsensusTracers trBase trForward mbTrEKG _trDataPoint trConfig nodeKernel = d
           traceWith blockchainTimeTr
       , Consensus.keepAliveClientTracer = Tracer $
           traceWith keepAliveClientTr
+      , Consensus.consensusStartupErrorTracer = Tracer $
+          traceWith consensusStartupErrorTr . ConsensusStartupException
       }
 
 mkNodeToClientTracers :: forall blk.
@@ -576,7 +586,7 @@ mkDiffusionTracers  trBase trForward mbTrEKG _trDataPoint trConfig = do
            traceWith dtLocalMuxTr
        , Diffusion.dtLocalHandshakeTracer          = Tracer $
            traceWith dtLocalHandshakeTr
-       , Diffusion.dtDiffusionInitializationTracer = Tracer $
+       , Diffusion.dtDiffusionTracer               = Tracer $
            traceWith dtDiffusionInitializationTr
        , Diffusion.dtLedgerPeersTracer             = Tracer $
            traceWith dtLedgerPeersTr

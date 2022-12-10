@@ -8,8 +8,8 @@ To set up your platform, you will need:
 
 
 | Network | CPU Cores | Free RAM | Free storage | OS for Pasive Node | OS for Stake pool |
-| :---: | :---: | :---: | :---: | :---: | :---: | 
-| Mainnet | 2 | 16GB | 75GB of free storage (100GB recommended for future growth | Linux / Windows** / MacOS | Linux | 
+| :---: | :---: | :---: | :---: | :---: | :---: |
+| Mainnet | 2 | 16GB | 75GB of free storage (100GB recommended for future growth | Linux / Windows** / MacOS | Linux |
 | Testnet | 2 | 4GB | 20GB | Linux / Windows** / MacOS | Linux |
 
 ****Note** If you are building on Windows, we recommend using WSL2 under Windows 10 as this provides a development and execution environment that is very similar to Ubuntu.
@@ -44,6 +44,8 @@ For Debian/Ubuntu, use the following instead:
 sudo apt-get update -y
 sudo apt-get install automake build-essential pkg-config libffi-dev libgmp-dev libssl-dev libtinfo-dev libsystemd-dev zlib1g-dev make g++ tmux git jq wget libncursesw5 libtool autoconf liblmdb-dev -y
 ```
+
+Optional dependencies that may be required: llvm libnuma-dev
 
 If you are using a different flavor of Linux, you will need to use the correct package manager for your platform instead of `yum` or `apt-get`, and the names of the packages you need to install might differ.  On MacOSX, use the Homebrew (`brew`) installer.
 
@@ -112,6 +114,12 @@ Add the following to your `~/.bashrc` file and source it (or re-open the termina
 export LD_LIBRARY_PATH="/usr/local/lib:$LD_LIBRARY_PATH"
 export PKG_CONFIG_PATH="/usr/local/lib/pkgconfig:$PKG_CONFIG_PATH"
 ```
+
+For some distributions you will also need to configure the dynamic linker.  If
+the executable is linked with the right `libsodium.so` file (which you can
+check by running `ldd`), the running binary might still use the wrong library.
+You can check this by running `pldd`. If the `pldd` shows that the running executable 
+is using the wrong library, run `ldconfig`.
 
 ##### Using the ported `c` code
 

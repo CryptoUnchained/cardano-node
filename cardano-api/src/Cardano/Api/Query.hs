@@ -73,8 +73,8 @@ import           Data.Aeson.Types (Parser)
 import           Data.Bifunctor (bimap, first)
 import qualified Data.ByteString.Lazy as LBS
 import qualified Data.HashMap.Strict as HMS
-import           Data.Map (Map)
-import qualified Data.Map as Map
+import           Data.Map.Strict (Map)
+import qualified Data.Map.Strict as Map
 import           Data.Maybe (mapMaybe)
 import           Data.Set (Set)
 import qualified Data.Set as Set
@@ -129,6 +129,7 @@ import           Cardano.Api.TxBody
 import           Cardano.Api.Value
 import           Data.Word (Word64)
 
+import           Cardano.Ledger.SafeHash (HashAnnotated)
 import qualified Data.Aeson.KeyMap as KeyMap
 
 -- ----------------------------------------------------------------------------
@@ -292,7 +293,7 @@ instance IsCardanoEra era => ToJSON (UTxO era) where
   toJSON (UTxO m) = toJSON m
   toEncoding (UTxO m) = toEncoding m
 
-instance (IsCardanoEra era, IsShelleyBasedEra era, FromJSON (TxOut CtxUTxO era))
+instance (IsShelleyBasedEra era, FromJSON (TxOut CtxUTxO era))
   => FromJSON (UTxO era) where
     parseJSON = withObject "UTxO" $ \hm -> do
       let l = HMS.toList $ KeyMap.toHashMapText hm
@@ -326,6 +327,7 @@ instance
     , FromCBOR (Ledger.State (Core.EraRule "PPUP" (ShelleyLedgerEra era)))
     , Share (Core.TxOut (ShelleyLedgerEra era)) ~ Interns (Shelley.Credential 'Shelley.Staking (Ledger.Crypto (ShelleyLedgerEra era)))
     , FromSharedCBOR (Core.TxOut (ShelleyLedgerEra era))
+    , HashAnnotated (Core.TxBody (ShelleyLedgerEra era)) Core.EraIndependentTxBody (Ledger.Crypto (ShelleyLedgerEra era))
     ) => FromCBOR (DebugLedgerState era) where
   fromCBOR = DebugLedgerState <$> (fromCBOR :: Decoder s (Shelley.NewEpochState (ShelleyLedgerEra era)))
 
@@ -334,7 +336,7 @@ instance ( IsShelleyBasedEra era
          , ShelleyLedgerEra era ~ ledgerera
          , Consensus.ShelleyBasedEra ledgerera
          , ToJSON (Core.PParams ledgerera)
-         , ToJSON (Core.PParamsDelta ledgerera)
+         , ToJSON (Core.PParamsUpdate ledgerera)
          , ToJSON (Core.TxOut ledgerera)
          , Share (Core.TxOut (ShelleyLedgerEra era)) ~ Interns (Shelley.Credential 'Shelley.Staking (Ledger.Crypto (ShelleyLedgerEra era)))
          ) => ToJSON (DebugLedgerState era) where
@@ -345,7 +347,7 @@ toDebugLedgerStatePair ::
   ( ShelleyLedgerEra era ~ ledgerera
   , Consensus.ShelleyBasedEra ledgerera
   , ToJSON (Core.PParams ledgerera)
-  , ToJSON (Core.PParamsDelta ledgerera)
+  , ToJSON (Core.PParamsUpdate ledgerera)
   , ToJSON (Core.TxOut ledgerera)
   , Aeson.KeyValue a
   ) => DebugLedgerState era -> [a]
@@ -380,8 +382,9 @@ newtype SerialisedCurrentEpochState era
 newtype CurrentEpochState era = CurrentEpochState (Shelley.EpochState (ShelleyLedgerEra era))
 
 decodeCurrentEpochState
-  :: forall era. Ledger.Era (ShelleyLedgerEra era)
-  => Share (Core.TxOut (ShelleyLedgerEra era)) ~ Interns (Shelley.Credential 'Shelley.Staking (Ledger.Crypto (ShelleyLedgerEra era)))
+  :: forall era. ( Ledger.Era (ShelleyLedgerEra era)
+                 , HashAnnotated (Core.TxBody (ShelleyLedgerEra era)) Core.EraIndependentTxBody (Ledger.Crypto (ShelleyLedgerEra era))
+                 )
   => FromSharedCBOR (Core.TxOut (ShelleyLedgerEra era))
   => Share (Core.TxOut (ShelleyLedgerEra era)) ~ Interns (Shelley.Credential 'Shelley.Staking (Ledger.Crypto (ShelleyLedgerEra era)))
   => FromCBOR (Core.PParams (ShelleyLedgerEra era))

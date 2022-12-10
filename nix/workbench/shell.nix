@@ -7,9 +7,8 @@
 ##
 , cardano-mainnet-mirror
 ##
-, profileName
+, workbenchRun
 , workbenchDevMode ? false
-, useCabalRun ? false
 ##
 , profiled ? false
 , withHoogle ? true
@@ -18,17 +17,17 @@
 
 with lib;
 
-let cluster = pkgs.supervisord-workbench-for-profile {
-      inherit profileName useCabalRun profiled;
-    };
+let
+    inherit (workbenchRun) profileName backend profile;
 
-    shellHook = { workbenchDevMode, useCabalRun, profiled, profileName, withMainnet }: ''
+    shellHook = { profileName, backend, workbenchDevMode, profiled, withMainnet }: ''
       while test $# -gt 0
       do shift; done       ## Flush argv[]
 
-      echo 'workbench shellHook:  workbenchDevMode=${toString workbenchDevMode} useCabalRun=${toString useCabalRun} profiled=${toString profiled} profileName=${profileName}'
-      export WB_BACKEND=supervisor
+      echo 'workbench shellHook:  profileName=${profileName} backendName=${backend.name} useCabalRun=${toString backend.useCabalRun} workbenchDevMode=${toString workbenchDevMode} profiled=${toString profiled} '
+      export WB_BACKEND=${backend.name}
       export WB_SHELL_PROFILE=${profileName}
+      export WB_SHELL_PROFILE_DIR=${profile}
 
       ${optionalString
         workbenchDevMode
@@ -43,7 +42,7 @@ let cluster = pkgs.supervisord-workbench-for-profile {
         ''}
 
       ${optionalString
-        useCabalRun
+        backend.useCabalRun
         ''
       . nix/workbench/lib.sh
       . nix/workbench/lib-cabal.sh ${optionalString profiled "--profiled"}
@@ -71,10 +70,17 @@ let cluster = pkgs.supervisord-workbench-for-profile {
 in project.shellFor {
   name = "workbench-shell";
 
-  shellHook = shellHook { inherit workbenchDevMode useCabalRun profiled profileName withMainnet; };
+  shellHook = shellHook { inherit profileName backend workbenchDevMode profiled withMainnet; };
 
   inherit withHoogle;
 
+  # The workbench shell uses cabalWrapped, which removes the `source-repository-package` stanzas
+  # from `cabal.project`. The idea is to use prebuilt ones provided by haskell.nix. However,
+  # haskell.nix is clever enough to not include `source-repository-package`s in the shell
+  # package db, because it knows that cabal will rebuild them. So you just end up with nothing!
+  # We can work around this by overriding haskell.nix's selection of which packages the shell
+  # is prepared for, so that it *doesn't* include the `source-repository-package` ones
+  # (the default is *local* packages which includes them, we select *project* pacakges which doesn't)
   packages = ps: builtins.attrValues (haskellLib.selectProjectPackages ps);
 
   tools = {
@@ -87,19 +93,14 @@ in project.shellFor {
   # These programs will be available inside the nix-shell.
   nativeBuildInputs = with pkgs; with haskellPackages; with cardanoNodePackages; [
     cardano-ping
-    cabalWrapped
     db-analyser
-    ghcid
-    haskellBuildUtils
     pkgs.graphviz
     graphmod
-    cabal-plan
     weeder
     nixWrapped
     pkgconfig
     profiteur
     profiterole
-    python3Packages.supervisor
     ghc-prof-flamegraph
     sqlite-interactive
     tmux
@@ -108,28 +109,17 @@ in project.shellFor {
     pkgs.moreutils
     pkgs.pstree
     pkgs.time
-    cluster.interactive-start
-    cluster.interactive-stop
-    cluster.interactive-restart
+    workbenchRun.interactive-start
+    workbenchRun.interactive-stop
+    workbenchRun.interactive-restart
   ] ++ lib.optional haveGlibcLocales pkgs.glibcLocales
-  ## Workbench's main script is called directly in dev mode.
-  ++ lib.optionals (!useCabalRun)
-    [
-      cardano-cli
-      cardano-node
-      cardano-topology
-      cardano-tracer
-      locli
-      tx-generator
-    ]
+  ++ lib.optionals (!backend.useCabalRun) [cardano-topology cardano-cli locli]
+  ++ backend.extraShellPkgs
   ++ lib.optionals (!workbenchDevMode)
     [
-      cluster.workbench.workbench
-    ];
-
-  # Prevents cabal from choosing alternate plans, so that
-  # *all* dependencies are provided by Nix.
-  exactDeps = true;
+      workbenchRun.workbench.workbench
+    ]
+    ;
 
 } // { inherit shellHook;
      }

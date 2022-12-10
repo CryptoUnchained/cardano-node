@@ -7,13 +7,15 @@ module Cardano.Chairman.Commands.Run
   ( cmdRun
   ) where
 
-import           Cardano.Prelude hiding (option)
+import qualified Cardano.Api as Api
+import           Cardano.Prelude
 
 import           Control.Monad.Class.MonadTime (DiffTime)
 import           Control.Tracer (Tracer (..), stdoutTracer)
 import qualified Data.Text as Text
 import qualified Data.Time.Clock as DTC
 import           Options.Applicative
+import qualified Options.Applicative as Opt
 import qualified System.IO as IO
 
 import           Cardano.Node.Configuration.NodeAddress
@@ -28,7 +30,6 @@ import           Ouroboros.Consensus.Node.ProtocolInfo
 
 
 import           Cardano.Api
-import qualified Cardano.Api.Protocol.Types as Protocol
 import           Cardano.Chairman (chairmanTest)
 
 data RunOpts = RunOpts
@@ -63,7 +64,7 @@ parseSocketPath helpMessage =
 
 parseRunningTime :: Parser DiffTime
 parseRunningTime =
-  option ((fromIntegral :: Int -> DiffTime) <$> auto)
+  Opt.option ((fromIntegral :: Int -> DiffTime) <$> auto)
     (  long "timeout"
     <> short 't'
     <> metavar "SECONDS"
@@ -72,7 +73,7 @@ parseRunningTime =
 
 parseProgress :: Parser BlockNo
 parseProgress =
-  option ((fromIntegral :: Int -> BlockNo) <$> auto)
+  Opt.option ((fromIntegral :: Int -> BlockNo) <$> auto)
     (  long "require-progress"
     <> short 'p'
     <> metavar "INT"
@@ -114,7 +115,7 @@ run RunOpts
 
   let (k , nId) = case p of
             SomeConsensusProtocol _ runP ->
-              let ProtocolInfo { pInfoConfig } = Protocol.protocolInfo runP
+              let ProtocolInfo { pInfoConfig } = Api.protocolInfo runP
               in ( Consensus.configSecurityParam pInfoConfig
                  , fromNetworkMagic . getNetworkMagic $ Consensus.configBlock pInfoConfig
                  )

@@ -39,7 +39,7 @@ instance LogFormatting Message where
             ]
   forMachine _dtal (Message3 mid d) =
     mconcat [ "kind" .= String "Message3"
-            , "mid" .= String (showT mid)
+            , "mid" .= String ("<" <> showT mid <> ">")
             , "workload" .= String (showT d)
             ]
   forHuman (Message1 mid i) =

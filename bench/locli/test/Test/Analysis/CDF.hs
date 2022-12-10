@@ -2,7 +2,6 @@
 {-# OPTIONS_GHC -Wno-missing-signatures #-}
 module Test.Analysis.CDF where
 
-import Prelude (head)
 import Cardano.Prelude hiding (handle, head)
 
 import Hedgehog
@@ -66,9 +65,9 @@ cdf2_3x3x3sh =
 prop_CDF_I_2x2 = property $ cdfI_2x2 ===
   CDF
   { cdfSize = 2
-  , cdfAverage = 0.5
+  , cdfAverage = I 0.5
   , cdfStddev = 0.7071067811865476
-  , cdfRange = (0.0,1.0)
+  , cdfRange = Interval 0.0 1.0
   , cdfSamples =
     [(Centile 0.25,I 0.0)
     ,(Centile 0.75,I 1.0)]}
@@ -76,16 +75,25 @@ prop_CDF_I_2x2 = property $ cdfI_2x2 ===
 prop_CDF_CDF_I_3x3 = property $ cdf2_3x3 ===
   CDF
   { cdfSize = 9
-  , cdfAverage = 1.0
+  , cdfAverage =
+    CDF
+    { cdfSize = 3
+    , cdfAverage = I 1.0
+    , cdfStddev = 0.0
+    , cdfRange = Interval 1.0 1.0
+    , cdfSamples =
+      [(Centile 0.16666666666666666, I 1.0)
+      ,(Centile 0.5,                 I 1.0)
+      ,(Centile 0.8333333333333333,  I 1.0)]}
   , cdfStddev = 1.0
-  , cdfRange = (0.0,2.0)
+  , cdfRange = Interval 0.0 2.0
   , cdfSamples =
     [(Centile 0.16666666666666666
      ,CDF
       { cdfSize = 3
-      , cdfAverage = 0.0
+      , cdfAverage = I 0.0
       , cdfStddev = 0.0
-      , cdfRange = (0.0,0.0)
+      , cdfRange = Interval 0.0 0.0
       , cdfSamples =
         [(Centile 0.16666666666666666, I 0.0)
         ,(Centile 0.5,                 I 0.0)
@@ -93,9 +101,9 @@ prop_CDF_CDF_I_3x3 = property $ cdf2_3x3 ===
     ,(Centile 0.5
      ,CDF
       { cdfSize = 3
-      , cdfAverage = 1.0
+      , cdfAverage = I 1.0
       , cdfStddev = 0.0
-      , cdfRange = (1.0,1.0)
+      , cdfRange = Interval 1.0 1.0
       , cdfSamples =
         [(Centile 0.16666666666666666, I 1.0)
         ,(Centile 0.5,                 I 1.0)
@@ -103,9 +111,9 @@ prop_CDF_CDF_I_3x3 = property $ cdf2_3x3 ===
     ,(Centile 0.8333333333333333
      ,CDF
       { cdfSize = 3
-      , cdfAverage = 2.0
+      , cdfAverage = I 2.0
       , cdfStddev = 0.0
-      , cdfRange = (2.0,2.0)
+      , cdfRange = Interval 2.0 2.0
       , cdfSamples =
         [(Centile 0.16666666666666666, I 2.0)
         ,(Centile 0.5,                 I 2.0)
@@ -114,16 +122,25 @@ prop_CDF_CDF_I_3x3 = property $ cdf2_3x3 ===
 prop_CDF_CDF_I_3x3_shifted = property $ cdf2_3x3sh ===
   CDF
   { cdfSize = 9
-  , cdfAverage = 1.0
+  , cdfAverage =
+    CDF
+    { cdfSize = 3
+    , cdfAverage = I 1.0
+    , cdfStddev = 1.0
+    , cdfRange = Interval 0.0 2.0
+    , cdfSamples =
+      [(Centile 0.16666666666666666, I 0.0)
+      ,(Centile 0.5,                 I 1.0)
+      ,(Centile 0.8333333333333333,  I 2.0)]}
   , cdfStddev = 1.0
-  , cdfRange = (-1.0,3.0)
+  , cdfRange = Interval (-1.0) 3.0
   , cdfSamples =
     [(Centile 0.16666666666666666
      ,CDF
       { cdfSize = 3
-      , cdfAverage = 0.0
+      , cdfAverage = I 0.0
       , cdfStddev = 1.0
-      , cdfRange = (-1.0,1.0)
+      , cdfRange = Interval (-1.0) 1.0
       , cdfSamples =
         [(Centile 0.16666666666666666, I (-1.0))
         ,(Centile 0.5,                 I 0.0)
@@ -131,9 +148,9 @@ prop_CDF_CDF_I_3x3_shifted = property $ cdf2_3x3sh ===
     ,(Centile 0.5
      ,CDF
       { cdfSize = 3
-      , cdfAverage = 1.0
+      , cdfAverage = I 1.0
       , cdfStddev = 1.0
-      , cdfRange = (0.0,2.0)
+      , cdfRange = Interval 0.0 2.0
       , cdfSamples =
         [(Centile 0.16666666666666666, I 0.0)
         ,(Centile 0.5,                 I 1.0)
@@ -141,9 +158,9 @@ prop_CDF_CDF_I_3x3_shifted = property $ cdf2_3x3sh ===
     ,(Centile 0.8333333333333333
      ,CDF
       { cdfSize = 3
-      , cdfAverage = 2.0
+      , cdfAverage = I 2.0
       , cdfStddev = 1.0
-      , cdfRange = (1.0,3.0)
+      , cdfRange = Interval 1.0 3.0
       , cdfSamples =
         [(Centile 0.16666666666666666, I 1.0)
         ,(Centile 0.5,                 I 2.0)
@@ -152,16 +169,25 @@ prop_CDF_CDF_I_3x3_shifted = property $ cdf2_3x3sh ===
 prop_CDF_CDF_I_3x3x3_collapsed_shifted = property $ cdf2_3x3x3sh ===
   CDF
   { cdfSize = 27
-  , cdfAverage = 1.0
+  , cdfAverage =
+    CDF
+    { cdfSize = 3
+    , cdfAverage = I 1.0
+    , cdfStddev = 2.0
+    , cdfRange = Interval (-1.0) 3.0
+    , cdfSamples =
+      [(Centile 0.16666666666666666, I (-1.0))
+      ,(Centile 0.5,                 I 1.0)
+      ,(Centile 0.8333333333333333,  I 3.0)]}
   , cdfStddev = 1.0
-  , cdfRange = (-3.0,5.0)
+  , cdfRange = Interval (-3.0) 5.0
   , cdfSamples =
     [(Centile 0.16666666666666666
      ,CDF
       { cdfSize = 9
-      , cdfAverage = 0.0
+      , cdfAverage = I 0.0
       , cdfStddev = 1.0
-      , cdfRange = (-3.0,3.0)
+      , cdfRange = Interval (-3.0) 3.0
       , cdfSamples =
         [(Centile 0.16666666666666666, I (-1.0))
         ,(Centile 0.5,                 I 0.0)
@@ -169,9 +195,9 @@ prop_CDF_CDF_I_3x3x3_collapsed_shifted = property $ cdf2_3x3x3sh ===
     ,(Centile 0.5
      ,CDF
       { cdfSize = 9
-      , cdfAverage = 1.0
+      , cdfAverage = I 1.0
       , cdfStddev = 1.0
-      , cdfRange = (-2.0,4.0)
+      , cdfRange = Interval (-2.0) 4.0
       , cdfSamples =
         [(Centile 0.16666666666666666, I 0.0)
         ,(Centile 0.5,                 I 1.0)
@@ -179,10 +205,10 @@ prop_CDF_CDF_I_3x3x3_collapsed_shifted = property $ cdf2_3x3x3sh ===
     ,(Centile 0.8333333333333333
      ,CDF
       { cdfSize = 9
-      , cdfAverage = 2.0
+      , cdfAverage = I 2.0
       , cdfStddev = 1.0
-      , cdfRange = (-1.0,5.0)
-      , cdfSamples =
+      , cdfRange = Interval (-1.0) 5.0
+        , cdfSamples =
         [(Centile 0.16666666666666666, I 1.0)
         ,(Centile 0.5,                 I 2.0)
         ,(Centile 0.8333333333333333,  I 3.0)]})]}

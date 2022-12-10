@@ -3,6 +3,8 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PackageImports #-}
+{-# LANGUAGE RecordWildCards #-}
+{-# OPTIONS_GHC -Wno-unused-imports #-}
 
 module Cardano.Tracer.Test.Forwarder
   ( ForwardersMode (..)
@@ -15,13 +17,14 @@ import           Codec.CBOR.Term (Term)
 import           Control.Concurrent (threadDelay)
 import           Control.Concurrent.Async
 import           Control.Monad (forever)
-import           "contra-tracer" Control.Tracer (nullTracer, contramap, stdoutTracer)
+import           "contra-tracer" Control.Tracer (contramap, nullTracer, stdoutTracer)
 import           Data.Aeson (FromJSON, ToJSON)
 import qualified Data.ByteString.Lazy as LBS
 import           Data.Time.Clock (getCurrentTime)
 import           Data.Void (Void)
 import           Data.Word (Word16)
 import           GHC.Generics
+import           System.Directory
 import qualified System.Metrics as EKG
 
 import           Cardano.Logging (DetailLevel (..), SeverityS (..), TraceObject (..))
@@ -30,20 +33,19 @@ import           Cardano.Logging.Version (ForwardingVersion (..), ForwardingVers
 import           Ouroboros.Network.Driver.Limits (ProtocolTimeLimits)
 import           Ouroboros.Network.ErrorPolicy (nullErrorPolicies)
 import           Ouroboros.Network.IOManager (IOManager, withIOManager)
-import           Ouroboros.Network.Magic (NetworkMagic (..))
 import           Ouroboros.Network.Mux (MiniProtocol (..), MiniProtocolLimits (..),
                    MiniProtocolNum (..), MuxMode (..), OuroborosApplication (..),
                    RunMiniProtocol (..), miniProtocolLimits, miniProtocolNum, miniProtocolRun)
-import           Ouroboros.Network.Protocol.Handshake.Codec (codecHandshake,
-                   cborTermVersionDataCodec, noTimeLimitsHandshake)
+import           Ouroboros.Network.Protocol.Handshake.Codec (cborTermVersionDataCodec,
+                   codecHandshake, noTimeLimitsHandshake)
 import           Ouroboros.Network.Protocol.Handshake.Type (Handshake)
 import           Ouroboros.Network.Protocol.Handshake.Version (acceptableVersion,
                    simpleSingletonVersions)
 import           Ouroboros.Network.Snocket (Snocket, localAddressFromPath, localSnocket)
 import           Ouroboros.Network.Socket (AcceptedConnectionsLimit (..),
-                   SomeResponderApplication (..), cleanNetworkMutableState,
-                   connectToNode, newNetworkMutableState, nullNetworkConnectTracers,
-                   nullNetworkServerTracers, withServerNode)
+                   SomeResponderApplication (..), cleanNetworkMutableState, connectToNode,
+                   newNetworkMutableState, nullNetworkConnectTracers, nullNetworkServerTracers,
+                   withServerNode)
 import qualified System.Metrics.Configuration as EKGF
 import           System.Metrics.Network.Forwarder
 
@@ -55,6 +57,8 @@ import           Trace.Forward.Utils.DataPoint
 import           Trace.Forward.Utils.TraceObject
 
 import           Cardano.Tracer.Configuration (Verbosity (..))
+import           Cardano.Tracer.Test.TestSetup
+import           Cardano.Tracer.Test.Utils
 import           Cardano.Tracer.Utils
 
 data ForwardersMode = Initiator | Responder
@@ -73,31 +77,35 @@ mkTestDataPoint = TestDataPoint
   }
 
 launchForwardersSimple
-  :: ForwardersMode
-  -> FilePath
-  -> Word
-  -> Word
-  -> IO ()
-launchForwardersSimple mode p connSize disconnSize = withIOManager $ \iomgr ->
-  runInLoop (launchForwardersSimple' iomgr mode p connSize disconnSize) (Just Minimum) p 1
-
-launchForwardersSimple'
-  :: IOManager
+  :: TestSetup Identity
   -> ForwardersMode
   -> FilePath
   -> Word
   -> Word
   -> IO ()
-launchForwardersSimple' iomgr mode p connSize disconnSize =
+launchForwardersSimple ts mode p connSize disconnSize = withIOManager $ \iomgr ->
+  runInLoop (launchForwardersSimple' ts iomgr mode p connSize disconnSize) (Just Minimum) p 1
+
+launchForwardersSimple'
+  :: TestSetup Identity
+  -> IOManager
+  -> ForwardersMode
+  -> FilePath
+  -> Word
+  -> Word
+  -> IO ()
+launchForwardersSimple' ts iomgr mode p connSize disconnSize = do
   case mode of
     Initiator ->
       doConnectToAcceptor
+        ts
         (localSnocket iomgr)
         (localAddressFromPath p)
         noTimeLimitsHandshake
         (ekgConfig, tfConfig, dpfConfig)
     Responder ->
       doListenToAcceptor
+        ts
         (localSnocket iomgr)
         (localAddressFromPath p)
         noTimeLimitsHandshake
@@ -124,12 +132,13 @@ launchForwardersSimple' iomgr mode p connSize disconnSize =
   dpfConfig :: DPF.ForwarderConfiguration
   dpfConfig =
     DPF.ForwarderConfiguration
-      { DPF.forwarderTracer = contramap show stdoutTracer -- nullTracer
+      { DPF.forwarderTracer = nullTracer -- contramap show stdoutTracer -- nullTracer
       , DPF.acceptorEndpoint = p
       }
 
 doConnectToAcceptor
-  :: Snocket IO fd addr
+  :: TestSetup Identity
+  -> Snocket IO fd addr
   -> addr
   -> ProtocolTimeLimits (Handshake ForwardingVersion Term)
   -> ( EKGF.ForwarderConfiguration
@@ -137,7 +146,7 @@ doConnectToAcceptor
      , DPF.ForwarderConfiguration
      )
   -> IO ()
-doConnectToAcceptor snocket address timeLimits (ekgConfig, tfConfig, dpfConfig) = do
+doConnectToAcceptor TestSetup{..} snocket address timeLimits (ekgConfig, tfConfig, dpfConfig) = do
   store <- EKG.newStore
   EKG.registerGcMetrics store
   sink <- initForwardSink tfConfig
@@ -146,6 +155,7 @@ doConnectToAcceptor snocket address timeLimits (ekgConfig, tfConfig, dpfConfig) 
   withAsync (traceObjectsWriter sink) $ \_ -> do
     connectToNode
       snocket
+      mempty
       (codecHandshake forwardingVersionCodec)
       timeLimits
       (cborTermVersionDataCodec forwardingCodecCBORTerm)
@@ -153,7 +163,7 @@ doConnectToAcceptor snocket address timeLimits (ekgConfig, tfConfig, dpfConfig) 
       acceptableVersion
       (simpleSingletonVersions
          ForwardingV_1
-         (ForwardingVersionData $ NetworkMagic 764824073) -- Taken from mainnet shelley genesis file.
+         (ForwardingVersionData $ unI tsNetworkMagic)
          (forwarderApp [ (forwardEKGMetrics ekgConfig store,       1)
                        , (forwardTraceObjectsInit tfConfig sink,   2)
                        , (forwardDataPointsInit dpfConfig dpStore, 3)
@@ -178,7 +188,8 @@ doConnectToAcceptor snocket address timeLimits (ekgConfig, tfConfig, dpfConfig) 
 
 doListenToAcceptor
   :: Ord addr
-  => Snocket IO fd addr
+  => TestSetup Identity
+  -> Snocket IO fd addr
   -> addr
   -> ProtocolTimeLimits (Handshake ForwardingVersion Term)
   -> ( EKGF.ForwarderConfiguration
@@ -186,7 +197,9 @@ doListenToAcceptor
      , DPF.ForwarderConfiguration
      )
   -> IO ()
-doListenToAcceptor snocket address timeLimits (ekgConfig, tfConfig, dpfConfig) = do
+doListenToAcceptor TestSetup{..}
+  snocket address timeLimits (ekgConfig, tfConfig, dpfConfig) = do
+
   store <- EKG.newStore
   EKG.registerGcMetrics store
   sink <- initForwardSink tfConfig
@@ -197,6 +210,7 @@ doListenToAcceptor snocket address timeLimits (ekgConfig, tfConfig, dpfConfig) =
     race_ (cleanNetworkMutableState networkState)
           $ withServerNode
               snocket
+              mempty
               nullNetworkServerTracers
               networkState
               (AcceptedConnectionsLimit maxBound maxBound 0)
@@ -207,7 +221,7 @@ doListenToAcceptor snocket address timeLimits (ekgConfig, tfConfig, dpfConfig) =
               acceptableVersion
               (simpleSingletonVersions
                  ForwardingV_1
-                 (ForwardingVersionData $ NetworkMagic 764824073) -- Taken from mainnet shelley genesis file.
+                 (ForwardingVersionData $ unI tsNetworkMagic) -- Taken from mainnet shelley genesis file.
                  (SomeResponderApplication $
                     forwarderApp [ (forwardEKGMetricsResp ekgConfig store,   1)
                                  , (forwardTraceObjectsResp tfConfig sink,   2)

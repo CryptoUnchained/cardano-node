@@ -82,7 +82,7 @@ import           Data.SOP.Strict (NP (..))
 import           Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Text
-import           Data.Text.Lazy (toStrict)
+import qualified Data.Text.Lazy as LT
 import           Data.Text.Lazy.Builder (toLazyText)
 import           Data.Word
 import qualified Data.Yaml as Yaml
@@ -107,6 +107,7 @@ import           Cardano.Api.NetworkId (NetworkId (..), NetworkMagic (NetworkMag
 import           Cardano.Api.ProtocolParameters
 import           Cardano.Api.Query (CurrentEpochState (..), ProtocolState,
                    SerialisedCurrentEpochState (..), decodeCurrentEpochState, decodeProtocolState)
+import           Cardano.Api.Utils (textShow)
 import           Cardano.Binary (DecoderError, FromCBOR)
 import qualified Cardano.Chain.Genesis
 import qualified Cardano.Chain.Update
@@ -128,6 +129,7 @@ import qualified Cardano.Ledger.Era as Ledger
 import qualified Cardano.Ledger.Keys as Shelley.Spec
 import qualified Cardano.Ledger.Keys as SL
 import qualified Cardano.Ledger.PoolDistr as SL
+import           Cardano.Ledger.SafeHash (HashAnnotated)
 import qualified Cardano.Ledger.Shelley.API as ShelleyAPI
 import qualified Cardano.Ledger.Shelley.Genesis as Shelley.Spec
 import qualified Cardano.Protocol.TPraos.API as TPraos
@@ -1061,9 +1063,6 @@ readAlonzoGenesisConfig enc = do
   firstExceptT (NEAlonzoConfig file . renderAlonzoGenesisError)
     $ readAlonzoGenesis (GenesisFile file) (ncAlonzoGenesisHash enc)
 
-textShow :: Show a => a -> Text
-textShow = Text.pack . show
-
 readShelleyGenesis
     :: GenesisFile -> GenesisHashShelley
     -> ExceptT ShelleyGenesisError IO ShelleyConfig
@@ -1296,7 +1295,7 @@ instance Error LeadershipError where
   displayError LeaderErrDecodeLedgerStateFailure =
     "Failed to successfully decode ledger state"
   displayError (LeaderErrDecodeProtocolStateFailure (_, decErr)) =
-    "Failed to successfully decode protocol state: " <> Text.unpack (toStrict . toLazyText $ build decErr)
+    "Failed to successfully decode protocol state: " <> Text.unpack (LT.toStrict . toLazyText $ build decErr)
   displayError LeaderErrGenesisSlot =
     "Leadership schedule currently cannot be calculated from genesis"
   displayError (LeaderErrStakePoolHasNoStake poolId) =
@@ -1315,7 +1314,9 @@ instance Error LeadershipError where
 
 nextEpochEligibleLeadershipSlots
   :: forall era.
-     HasField "_d" (Core.PParams (ShelleyLedgerEra era)) UnitInterval
+     ( HasField "_d" (Core.PParams (ShelleyLedgerEra era)) UnitInterval
+     , HashAnnotated (Core.TxBody (ShelleyLedgerEra era)) Core.EraIndependentTxBody (Ledger.Crypto (ShelleyLedgerEra era))
+     )
   => Ledger.Era (ShelleyLedgerEra era)
   => Share (Core.TxOut (ShelleyLedgerEra era)) ~ Interns (Shelley.Spec.Credential 'Shelley.Spec.Staking (Cardano.Ledger.Era.Crypto (ShelleyLedgerEra era)))
   => FromCBOR (Consensus.ChainDepState (Api.ConsensusProtocol era))
@@ -1484,6 +1485,10 @@ obtainDecodeEpochStateConstraints
       , FromCBOR (State (Core.EraRule "PPUP" ledgerera))
       , FromCBOR (Core.Value ledgerera)
       , FromSharedCBOR (Core.TxOut ledgerera)
+      , HashAnnotated
+          (Core.TxBody ledgerera)
+          Core.EraIndependentTxBody
+          (Ledger.Crypto (ShelleyLedgerEra era))
       ) => a) -> a
 obtainDecodeEpochStateConstraints ShelleyBasedEraShelley f = f
 obtainDecodeEpochStateConstraints ShelleyBasedEraAllegra f = f

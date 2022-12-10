@@ -12,21 +12,21 @@ import           Data.Word (Word32)
 import           Cardano.Logging (TraceObject)
 import           Cardano.Logging.Version (ForwardingVersion (..), ForwardingVersionData (..),
                    forwardingCodecCBORTerm, forwardingVersionCodec)
-import           Ouroboros.Network.Mux (MiniProtocol (..), MiniProtocolLimits (..),
-                   MiniProtocolNum (..), MuxMode (..), OuroborosApplication (..),
-                   RunMiniProtocol (..), miniProtocolLimits, miniProtocolNum, miniProtocolRun)
 import           Ouroboros.Network.Driver.Limits (ProtocolTimeLimits)
 import           Ouroboros.Network.IOManager (withIOManager)
 import           Ouroboros.Network.Magic (NetworkMagic (..))
-import           Ouroboros.Network.Snocket (LocalAddress, LocalSocket, Snocket,
-                   localAddressFromPath, localSnocket)
-import           Ouroboros.Network.Socket (ConnectionId (..), connectToNode,
-                   nullNetworkConnectTracers)
+import           Ouroboros.Network.Mux (MiniProtocol (..), MiniProtocolLimits (..),
+                   MiniProtocolNum (..), MuxMode (..), OuroborosApplication (..),
+                   RunMiniProtocol (..), miniProtocolLimits, miniProtocolNum, miniProtocolRun)
 import           Ouroboros.Network.Protocol.Handshake.Codec (cborTermVersionDataCodec,
                    codecHandshake, noTimeLimitsHandshake)
 import           Ouroboros.Network.Protocol.Handshake.Type (Handshake)
 import           Ouroboros.Network.Protocol.Handshake.Version (acceptableVersion,
                    simpleSingletonVersions)
+import           Ouroboros.Network.Snocket (LocalAddress, LocalSocket, Snocket,
+                   localAddressFromPath, localSnocket)
+import           Ouroboros.Network.Socket (ConnectionId (..), connectToNode,
+                   nullNetworkConnectTracers)
 import qualified System.Metrics.Configuration as EKGF
 import           System.Metrics.Network.Acceptor (acceptEKGMetricsInit)
 
@@ -40,6 +40,7 @@ import           Cardano.Tracer.Acceptors.Utils (notifyAboutNodeDisconnected,
 import qualified Cardano.Tracer.Configuration as TC
 import           Cardano.Tracer.Environment
 import           Cardano.Tracer.Handlers.Logs.TraceObjects (traceObjectsHandler)
+import           Cardano.Tracer.MetaTrace
 import           Cardano.Tracer.Utils (connIdToNodeId)
 
 runAcceptorsClient
@@ -50,7 +51,8 @@ runAcceptorsClient
      , DPF.AcceptorConfiguration
      )
   -> IO ()
-runAcceptorsClient tracerEnv p (ekgConfig, tfConfig, dpfConfig) = withIOManager $ \iocp ->
+runAcceptorsClient tracerEnv p (ekgConfig, tfConfig, dpfConfig) = withIOManager $ \iocp -> do
+  traceWith (teTracer tracerEnv) $ TracerSockConnecting p
   doConnectToForwarder
     (localSnocket iocp)
     (localAddressFromPath p)
@@ -87,6 +89,9 @@ doConnectToForwarder
 doConnectToForwarder snocket address netMagic timeLimits app =
   connectToNode
     snocket
+    -- local sockets (e.g. unix sockets or named pipes on Windows), do
+    -- not need any configuration; we only need to configure node-to-node sockets.
+    mempty
     (codecHandshake forwardingVersionCodec)
     timeLimits
     (cborTermVersionDataCodec forwardingCodecCBORTerm)

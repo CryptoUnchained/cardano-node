@@ -7,7 +7,6 @@
 module Cardano.CLI.Types
   ( BalanceTxExecUnits (..)
   , CBORObject (..)
-  , CddlTx (..)
   , CertificateFile (..)
   , CurrentKesPeriod (..)
   , EpochLeadershipSchedule (..)
@@ -19,11 +18,9 @@ module Cardano.CLI.Types
   , OpCertNodeStateCounter (..)
   , OpCertStartingKesPeriod (..)
   , OutputFormat (..)
-  , OutputSerialisation (..)
   , TxBuildOutputOptions(..)
   , ReferenceScriptAnyEra (..)
   , SigningKeyFile (..)
-  , SocketPath (..)
   , ScriptFile (..)
   , ScriptDataOrFile (..)
   , ScriptRedeemerOrFile
@@ -36,6 +33,7 @@ module Cardano.CLI.Types
   , TxOutChangeAddress (..)
   , TxOutDatumAnyEra (..)
   , TxFile (..)
+  , TxMempoolQuery (..)
   , UpdateProposalFile (..)
   , VerificationKeyFile (..)
   , Stakes (..)
@@ -53,8 +51,8 @@ import           Data.Word (Word64)
 import qualified Cardano.Chain.Slotting as Byron
 
 import           Cardano.Api (AddressAny, AnyScriptLanguage, EpochNo, ExecutionUnits, Hash,
-                   InAnyCardanoEra, PaymentKey, PolicyId, ScriptData, SlotNo (SlotNo), Tx, TxIn,
-                   Value, WitCtxMint, WitCtxStake, WitCtxTxIn)
+                   PaymentKey, PolicyId, ScriptData, SlotNo (SlotNo), TxId, TxIn, Value, WitCtxMint,
+                   WitCtxStake, WitCtxTxIn)
 
 import qualified Cardano.Ledger.Crypto as Crypto
 
@@ -75,8 +73,6 @@ data CBORObject = CBORBlockByron Byron.EpochSlots
                 | CBORUpdateProposalByron
                 | CBORVoteByron
                 deriving Show
-
-newtype CddlTx = CddlTx {unCddlTx :: InAnyCardanoEra Tx}
 
 -- Encompasses stake certificates, stake pool certificates,
 -- genesis delegate certificates and MIR certificates.
@@ -186,14 +182,6 @@ data OutputFormat
   | OutputFormatBech32
   deriving (Eq, Show)
 
--- | Specify whether to serialise a value according to the ledger's CDDL spec
--- or the cli's intermediate format. Note the intermediate format is defined
--- within SerialiseAsCBOR instances. The plan is to merge TextEnvelope with
--- SerialiseAsCBOR.
-data OutputSerialisation
-  = OutputLedgerCDDLSerialisation
-  | OutputCliSerialisation
-  deriving Show
 
 -- | This data structure is used to allow nicely formatted output within the query stake-snapshot command.
 --
@@ -258,8 +246,6 @@ newtype SigningKeyFile = SigningKeyFile
   { unSigningKeyFile :: FilePath }
   deriving stock (Eq, Ord)
   deriving newtype (IsString, Show)
-
-newtype SocketPath = SocketPath { unSocketPath :: FilePath }
 
 newtype UpdateProposalFile = UpdateProposalFile { unUpdateProposalFile :: FilePath }
                              deriving newtype (Eq, Show)
@@ -395,4 +381,8 @@ newtype TxFile
   = TxFile FilePath
   deriving Show
 
-
+data TxMempoolQuery =
+      TxMempoolQueryTxExists TxId
+    | TxMempoolQueryNextTx
+    | TxMempoolQueryInfo
+  deriving Show

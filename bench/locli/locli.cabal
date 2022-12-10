@@ -63,44 +63,54 @@ library
                        Cardano.TopHandler
                        Cardano.Util
 
-                       Cardano.Analysis.Run
-
                        Cardano.Analysis.API
+                       Cardano.Analysis.API.Chain
+                       Cardano.Analysis.API.ChainFilter
+                       Cardano.Analysis.API.Context
+                       Cardano.Analysis.API.Dictionary
+                       Cardano.Analysis.API.Field
+                       Cardano.Analysis.API.Ground
+                       Cardano.Analysis.API.Metrics
+                       Cardano.Analysis.API.Run
+                       Cardano.Analysis.API.Types
+                       Cardano.Analysis.API.LocliVersion
+
                        Cardano.Analysis.BlockProp
-                       Cardano.Analysis.Chain
-                       Cardano.Analysis.ChainFilter
-                       Cardano.Analysis.Context
-                       Cardano.Analysis.Ground
                        Cardano.Analysis.MachPerf
-                       Cardano.Analysis.Version
+                       Cardano.Analysis.Summary
+
+                       Cardano.JSON
+                       Cardano.Org
+                       Cardano.Render
 
                        Cardano.Unlog.LogObject
-                       Cardano.Unlog.Org
-                       Cardano.Unlog.Render
                        Cardano.Unlog.Resources
 
   other-modules:       Paths_locli
+  autogen-modules:     Paths_locli
 
   build-depends:       aeson
+                     , Histogram
                      , aeson-pretty
                      , async
                      , attoparsec
                      , attoparsec-iso8601
                      , bytestring
                      , cardano-git-rev
-                     , cardano-prelude
                      , cardano-ledger-core
-                     , iohk-monitoring
+                     , cardano-prelude
                      , cardano-slotting
                      , containers
                      , deepseq
                      , directory
                      , ede
                      , extra
-                     , filepath
                      , file-embed
+                     , filepath
+                     , fingertree
+                     , ghc
                      , gnuplot
-                     , Histogram
+                     , iohk-monitoring
                      , optparse-applicative-fork
                      , optparse-generic
                      , ouroboros-consensus
@@ -123,6 +133,7 @@ library
                      , unordered-containers
                      , utf8-string
                      , vector
+                     , cardano-strict-containers == 0.1.0.1
 
 executable locli
   import:              base

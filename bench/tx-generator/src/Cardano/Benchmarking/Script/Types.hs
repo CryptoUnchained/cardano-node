@@ -1,48 +1,81 @@
 {-# LANGUAGE DeriveGeneric #-}
-{-# LANGUAGE GADTs #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE TypeFamilies #-}
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE ExistentialQuantification #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE GADTs #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE UndecidableInstances #-}
+{-# OPTIONS_GHC -fno-warn-orphans #-}
 
-module Cardano.Benchmarking.Script.Types
-where
+module Cardano.Benchmarking.Script.Types (
+          Action(..)
+        , Generator(Cycle, NtoM, OneOf, RoundRobin, SecureGenesis,
+                Sequence, Split, SplitN, Take)
+        , PayMode(PayToAddr, PayToScript)
+        , ProtocolParameterMode(..)
+        , ProtocolParametersSource(QueryLocalNode, UseLocalProtocolFile)
+        , ScriptBudget(AutoScript, CheckScriptBudget, StaticScriptBudget)
+        , ScriptSpec(ScriptSpec, scriptSpecFile, scriptSpecBudget)
+        , SubmitMode(Benchmark, DiscardTX, DumpToFile, LocalSocket,
+                NodeToNode)
+        , TargetNodes
+        , TxList(..)
+) where
 
-import           Prelude
 import           GHC.Generics
+import           Prelude
 
+import           Data.Function (on)
 import           Data.List.NonEmpty
+import           Data.Text (Text)
+
+import           Cardano.Api
+import           Cardano.Api.Shelley
 
 import           Cardano.Benchmarking.OuroborosImports (SigningKeyFile)
-import           Cardano.Api (AnyCardanoEra, ExecutionUnits, Lovelace, ScriptData, ScriptRedeemer, TextEnvelope, TxIn)
+import           Cardano.Node.Configuration.NodeAddress (NodeIPv4Address)
+
+import           Cardano.TxGenerator.Types
 
 
-import           Cardano.Benchmarking.Script.Env
-import           Cardano.Benchmarking.Script.Store
-import           Cardano.Benchmarking.Types (TPSRate, NodeIPv4Address)
+-- FIXME: temporary workaround instance until Action ADT is refactored
+instance Eq (SigningKey PaymentKey) where
+  (==) = (==) `on` serialiseToTextEnvelope Nothing
 
 data Action where
-  Set                :: !SetKeyVal -> Action
---  Declare            :: SetKeyVal   -> Action --declare (once): error if key was set before
-  InitWallet         :: !WalletName -> Action
-  StartProtocol      :: !FilePath -> Action
+  SetNetworkId       :: !NetworkId -> Action
+  SetSocketPath      :: !FilePath -> Action
+  InitWallet         :: !String -> Action
+  StartProtocol      :: !FilePath -> !(Maybe FilePath) -> Action
   Delay              :: !Double -> Action
-  ReadSigningKey     :: !KeyName -> !SigningKeyFile -> Action
-  DefineSigningKey   :: !KeyName -> !TextEnvelope -> Action
-  AddFund            :: !AnyCardanoEra -> !WalletName -> !TxIn -> !Lovelace -> !KeyName -> Action
-  ImportGenesisFund  :: !AnyCardanoEra -> !WalletName -> !SubmitMode -> !KeyName -> !KeyName -> Action
-  CreateChange       :: !AnyCardanoEra -> !WalletName -> !SubmitMode -> !PayMode -> !PayMode -> !Lovelace -> !Int -> Action
-  RunBenchmark       :: !AnyCardanoEra -> !WalletName -> !SubmitMode -> !ThreadName -> !RunBenchmarkAux -> Maybe WalletName -> !TPSRate -> Action
-  WaitBenchmark      :: !ThreadName -> Action
-  CancelBenchmark    :: !ThreadName -> Action
+  ReadSigningKey     :: !String -> !SigningKeyFile -> Action
+  DefineSigningKey   :: !String -> !(SigningKey PaymentKey) -> Action
+  AddFund            :: !AnyCardanoEra -> !String -> !TxIn -> !Lovelace -> !String -> Action
+  WaitBenchmark      :: !String -> Action
+  Submit             :: !AnyCardanoEra -> !SubmitMode -> !TxGenTxParams -> !Generator -> Action
+  CancelBenchmark    :: !String -> Action
   Reserved           :: [String] -> Action
   WaitForEra         :: !AnyCardanoEra -> Action
   SetProtocolParameters :: ProtocolParametersSource -> Action
+  LogMsg             :: !Text -> Action
   deriving (Show, Eq)
 deriving instance Generic Action
+
+data Generator where
+  SecureGenesis :: !String -> !String -> !String -> Generator -- 0 to N
+  Split :: !String -> !PayMode -> !PayMode -> [ Lovelace ] -> Generator
+  SplitN :: !String -> !PayMode -> !Int -> Generator            -- 1 to N
+  NtoM  :: !String -> !PayMode -> !NumberOfInputsPerTx -> !NumberOfOutputsPerTx
+        -> !(Maybe Int) -> Maybe String -> Generator
+  Sequence :: [Generator] -> Generator
+  Cycle :: !Generator -> Generator
+  Take :: !Int -> !Generator -> Generator
+  RoundRobin :: [Generator] -> Generator
+  OneOf :: [(Generator, Double)] -> Generator
+  deriving (Show, Eq)
+deriving instance Generic Generator
 
 data ProtocolParametersSource where
   QueryLocalNode :: ProtocolParametersSource
@@ -50,17 +83,20 @@ data ProtocolParametersSource where
   deriving (Show, Eq)
 deriving instance Generic ProtocolParametersSource
 
+type TargetNodes = NonEmpty NodeIPv4Address
+
 data SubmitMode where
   LocalSocket :: SubmitMode
-  NodeToNode  :: NonEmpty NodeIPv4Address -> SubmitMode
+  Benchmark   :: !TargetNodes -> !String -> !TPSRate -> !NumberOfTxs -> SubmitMode
   DumpToFile  :: !FilePath -> SubmitMode
   DiscardTX   :: SubmitMode
+  NodeToNode  :: NonEmpty NodeIPv4Address -> SubmitMode --deprecated
   deriving (Show, Eq)
 deriving instance Generic SubmitMode
 
 data PayMode where
-  PayToAddr :: !KeyName -> !WalletName -> PayMode
-  PayToScript :: !ScriptSpec -> !WalletName -> PayMode
+  PayToAddr :: !String -> !String -> PayMode
+  PayToScript :: !ScriptSpec -> !String -> PayMode
   deriving (Show, Eq)
 deriving instance Generic PayMode
 
@@ -79,14 +115,8 @@ data ScriptSpec = ScriptSpec
   deriving (Show, Eq)
 deriving instance Generic ScriptSpec
 
-data RunBenchmarkAux = RunBenchmarkAux {
-    auxTxCount :: Int
-  , auxFee :: Lovelace
-  , auxOutputsPerTx :: Int
-  , auxInputsPerTx :: Int
-  , auxInputs :: Int
-  , auxOutputs ::Int
-  , auxMinValuePerUTxO :: Lovelace
-  }
-  deriving (Show, Eq)
-deriving instance Generic RunBenchmarkAux
+newtype TxList era = TxList [Tx era]
+
+data ProtocolParameterMode where
+  ProtocolParameterQuery :: ProtocolParameterMode
+  ProtocolParameterLocal :: ProtocolParameters -> ProtocolParameterMode

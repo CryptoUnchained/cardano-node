@@ -13,23 +13,23 @@ import           Data.Word (Word32)
 import           Cardano.Logging (TraceObject)
 import           Cardano.Logging.Version (ForwardingVersion (..), ForwardingVersionData (..),
                    forwardingCodecCBORTerm, forwardingVersionCodec)
-import           Ouroboros.Network.Mux (MiniProtocol (..), MiniProtocolLimits (..),
-                   MiniProtocolNum (..), MuxMode (..), OuroborosApplication (..),
-                   RunMiniProtocol (..), miniProtocolLimits, miniProtocolNum, miniProtocolRun)
 import           Ouroboros.Network.Driver.Limits (ProtocolTimeLimits)
 import           Ouroboros.Network.ErrorPolicy (nullErrorPolicies)
 import           Ouroboros.Network.IOManager (withIOManager)
 import           Ouroboros.Network.Magic (NetworkMagic (..))
-import           Ouroboros.Network.Snocket (LocalAddress, LocalSocket, Snocket,
-                   localAddressFromPath, localSnocket)
-import           Ouroboros.Network.Socket (AcceptedConnectionsLimit (..), ConnectionId (..),
-                   SomeResponderApplication (..), cleanNetworkMutableState,
-                   newNetworkMutableState, nullNetworkServerTracers, withServerNode)
+import           Ouroboros.Network.Mux (MiniProtocol (..), MiniProtocolLimits (..),
+                   MiniProtocolNum (..), MuxMode (..), OuroborosApplication (..),
+                   RunMiniProtocol (..), miniProtocolLimits, miniProtocolNum, miniProtocolRun)
 import           Ouroboros.Network.Protocol.Handshake.Codec (cborTermVersionDataCodec,
                    codecHandshake, noTimeLimitsHandshake)
 import           Ouroboros.Network.Protocol.Handshake.Type (Handshake)
 import           Ouroboros.Network.Protocol.Handshake.Version (acceptableVersion,
                    simpleSingletonVersions)
+import           Ouroboros.Network.Snocket (LocalAddress, LocalSocket, Snocket,
+                   localAddressFromPath, localSnocket)
+import           Ouroboros.Network.Socket (AcceptedConnectionsLimit (..), ConnectionId (..),
+                   SomeResponderApplication (..), cleanNetworkMutableState, newNetworkMutableState,
+                   nullNetworkServerTracers, withServerNode)
 import qualified System.Metrics.Configuration as EKGF
 import           System.Metrics.Network.Acceptor (acceptEKGMetricsResp)
 
@@ -43,6 +43,7 @@ import           Cardano.Tracer.Acceptors.Utils (notifyAboutNodeDisconnected,
 import qualified Cardano.Tracer.Configuration as TC
 import           Cardano.Tracer.Environment
 import           Cardano.Tracer.Handlers.Logs.TraceObjects (traceObjectsHandler)
+import           Cardano.Tracer.MetaTrace
 import           Cardano.Tracer.Utils (connIdToNodeId)
 
 runAcceptorsServer
@@ -53,7 +54,8 @@ runAcceptorsServer
      , DPF.AcceptorConfiguration
      )
   -> IO ()
-runAcceptorsServer tracerEnv p (ekgConfig, tfConfig, dpfConfig) = withIOManager $ \iocp ->
+runAcceptorsServer tracerEnv p (ekgConfig, tfConfig, dpfConfig) = withIOManager $ \iocp -> do
+  traceWith (teTracer tracerEnv) $ TracerSockListen p
   doListenToForwarder
     (localSnocket iocp)
     (localAddressFromPath p)
@@ -92,6 +94,7 @@ doListenToForwarder snocket address netMagic timeLimits app = do
   race_ (cleanNetworkMutableState networkState)
         $ withServerNode
             snocket
+            mempty -- LocalSocket does not need to be configured
             nullNetworkServerTracers
             networkState
             (AcceptedConnectionsLimit maxBound maxBound 0)

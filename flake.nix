@@ -1,6 +1,11 @@
 {
   description = "Cardano Node";
 
+  nixConfig = {
+    extra-substituters = ["https://cache.iog.io"];
+    extra-trusted-public-keys = ["hydra.iohk.io:f/Ea+s+dFdN+3Y/G+FDgSq+a5NEWhJGzdjvKNGv0/EQ="];
+  };
+
   inputs = {
     # IMPORTANT: report any change to nixpkgs channel in nix/default.nix:
     nixpkgs.follows = "haskellNix/nixpkgs-unstable";
@@ -17,6 +22,10 @@
       url = "github:input-output-hk/haskell.nix";
       inputs.nixpkgs.follows = "nixpkgs";
       inputs.hackage.follows = "hackageNix";
+    };
+    CHaP = {
+      url = "github:input-output-hk/cardano-haskell-packages?ref=repo";
+      flake = false;
     };
     utils.url = "github:numtide/flake-utils";
     iohkNix = {
@@ -59,6 +68,13 @@
     };
 
     cardano-mainnet-mirror.url = "github:input-output-hk/cardano-mainnet-mirror/nix";
+
+    tullia = {
+      url = "github:input-output-hk/tullia";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
+    nix2container.url = "github:nlewo/nix2container";
   };
 
   outputs =
@@ -67,6 +83,7 @@
     , hostNixpkgs
     , utils
     , haskellNix
+    , CHaP
     , iohkNix
     , plutus-apps
     , cardano-mainnet-mirror
@@ -74,6 +91,8 @@
     , node-measured
     , node-process
     , cardano-node-workbench
+    , tullia
+    , nix2container
     , ...
     }@input:
     let
@@ -98,7 +117,7 @@
         iohkNix.overlays.cardano-lib
         iohkNix.overlays.utils
         (final: prev: {
-          inherit customConfig;
+          inherit customConfig nix2container;
           gitrev = final.customConfig.gitrev or self.rev or "0000000000000000000000000000000000000000";
           commonLib = lib
             // iohkNix.lib
@@ -137,6 +156,7 @@
               packages = lib.genAttrs [
                 "ouroboros-consensus"
                 "ouroboros-consensus-cardano"
+                "ouroboros-consensus-cardano-tools"
                 "ouroboros-consensus-byron"
                 "ouroboros-consensus-shelley"
                 "ouroboros-network"
@@ -176,7 +196,7 @@
           inherit pinned-workbench;
           projectExes = flatten (haskellLib.collectComponents' "exes" projectPackages) // (with hsPkgsWithPassthru; {
             inherit (ouroboros-consensus-byron.components.exes) db-converter;
-            inherit (ouroboros-consensus-cardano.components.exes) db-analyser;
+            inherit (ouroboros-consensus-cardano-tools.components.exes) db-analyser db-synthesizer;
             inherit (bech32.components.exes) bech32;
           } // lib.optionalAttrs hostPlatform.isUnix {
             inherit (network-mux.components.exes) cardano-ping;
@@ -202,6 +222,9 @@
           project = (import ./nix/haskell.nix {
             inherit (pkgs) haskell-nix gitrev;
             inherit projectPackagesExes;
+            inputMap = {
+              "https://input-output-hk.github.io/cardano-haskell-packages" = CHaP;
+            };
           }).appendModule customConfig.haskellNix // {
             profiled = profiledProject;
             asserted = assertedProject;
@@ -381,13 +404,16 @@
               };
             };
           };
-        }
+        } //
+        tullia.fromSimple system (import ./nix/tullia.nix self system)
       );
 
-      makeRequired = isPr: extra:
+      makeRequired = isPr: jobs: extra:
       let
-        jobs = lib.foldl' lib.mergeAttrs { } (lib.attrValues flake.systemHydraJobs);
-        nonRequiredPaths = map lib.hasPrefix ([ "macos." ] ++ lib.optional isPr "linux.native.membenches");
+        nonRequiredPaths = map lib.hasPrefix
+          ([ "macos." ] ++
+           [ "linux.windows.checks.cardano-tracer.cardano-tracer-test" ] ++
+           lib.optional isPr "linux.native.membenches");
       in with self.legacyPackages.${defaultSystem};
         releaseTools.aggregate {
           name = "github-required";
@@ -399,6 +425,14 @@
               jobs) ++ extra;
         };
 
+      makeOsRequired = isPr: jobs: {
+        linux = jobs.linux // {
+          required = makeRequired isPr jobs.linux [];
+        };
+        macos = jobs.macos // {
+          required = makeRequired isPr jobs.macos [];
+        };
+      };
 
       hydraJobs =
         let
@@ -409,22 +443,23 @@
           build-version = writeText "version.json" (builtins.toJSON {
             inherit (self) lastModified lastModifiedDate narHash outPath shortRev rev;
           });
-          required = makeRequired false [ cardano-deployment build-version ];
-        });
+          required = makeRequired false jobs [ cardano-deployment build-version ];
+        }) // makeOsRequired false jobs;
 
       hydraJobsPr =
         let
           nonPrJobs = map lib.hasPrefix [
             "linux.native.membenches"
           ];
-        in
-        (lib.mapAttrsRecursiveCond (v: !(lib.isDerivation v))
-          (path: value:
-            let stringPath = lib.concatStringsSep "." path; in if lib.isAttrs value && (lib.any (p: p stringPath) nonPrJobs) then { } else value)
-          hydraJobs) // {
-            required = makeRequired true [ hydraJobs.cardano-deployment hydraJobs.build-version ];
-          };
 
+          jobs = lib.mapAttrsRecursiveCond (v: !(lib.isDerivation v))
+            (path: value:
+              let stringPath = lib.concatStringsSep "." path; in if lib.isAttrs value && (lib.any (p: p stringPath) nonPrJobs) then { } else value)
+            hydraJobs;
+        in
+        jobs // {
+          required = makeRequired true jobs [ hydraJobs.cardano-deployment hydraJobs.build-version ];
+        } // makeOsRequired true jobs;
     in
     builtins.removeAttrs flake [ "systemHydraJobs" ] // {
 
@@ -433,10 +468,7 @@
       overlay = final: prev: {
         cardanoNodeProject = flake.project.${final.system};
         cardanoNodePackages = mkCardanoNodePackages final.cardanoNodeProject;
-        inherit (final.cardanoNodePackages) cardano-node cardano-cli cardano-submit-api bech32 plutus-example;
-
-        # TODO, fix this
-        #db-analyser = ouroboros-network-snapshot.haskellPackages.ouroboros-consensus-cardano.components.exes.db-analyser;
+        inherit (final.cardanoNodePackages) cardano-node cardano-cli cardano-submit-api cardano-tracer bech32 locli plutus-example db-analyser;
       };
       nixosModules = {
         cardano-node = { pkgs, lib, ... }: {

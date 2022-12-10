@@ -52,8 +52,8 @@ import qualified Hedgehog.Extras.Test.Process as H
 import qualified System.Info as OS
 import qualified System.IO as IO
 import qualified System.Process as IO
-import qualified Test.Process as H
 import qualified Testnet.Conf as H
+import qualified Util.Process as H
 
 {- HLINT ignore "Reduce duplication" -}
 {- HLINT ignore "Redundant <&>" -}
@@ -237,7 +237,7 @@ testnet testnetOptions H.Conf {..} = do
     sprocket <- H.noteShow $ Sprocket tempBaseAbsPath (socketDir </> "node-" <> si)
     _spocketSystemNameFile <- H.noteShow $ IO.sprocketSystemName sprocket
     -- TODO: Better error message need to indicate a sprocket was not created
-    H.assertByDeadlineM deadline $ H.doesSprocketExist sprocket
+    H.byDeadlineM 10 deadline $ H.assertM $ H.doesSprocketExist sprocket
 
   forM_ nodeIndexes $ \i -> do
     si <- H.noteShow $ show @Int i

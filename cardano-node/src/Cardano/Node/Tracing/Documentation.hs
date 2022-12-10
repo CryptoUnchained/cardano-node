@@ -28,6 +28,7 @@ import           Cardano.Logging.Resources
 import           Cardano.Logging.Resources.Types
 import           Cardano.Prelude hiding (trace)
 
+import           Cardano.Node.Tracing.DefaultTraceConfig (defaultCardanoConfig)
 import           Cardano.Node.Tracing.Formatting ()
 import qualified Cardano.Node.Tracing.StateRep as SR
 import           Cardano.Node.Tracing.Tracers.BlockReplayProgress
@@ -47,7 +48,6 @@ import           Cardano.Node.Tracing.Tracers.Startup
 import           Cardano.Node.Handlers.Shutdown (ShutdownTrace)
 import           Cardano.Node.Startup
 import           Cardano.Node.TraceConstraints
-
 
 import           Ouroboros.Consensus.Block.Forging
 import           Ouroboros.Consensus.BlockchainTime.WallClock.Types (RelativeTime)
@@ -183,7 +183,7 @@ docTracers :: forall blk peer remotePeer.
   -> Proxy remotePeer
   -> IO ()
 docTracers configFileName outputFileName _ _ _ = do
-    trConfig      <- readConfiguration configFileName
+    trConfig      <- readConfigurationWithDefault configFileName defaultCardanoConfig
     let trBase    :: Trace IO FormattedMessage = docTracer (Stdout MachineFormat)
         trForward :: Trace IO FormattedMessage = docTracer Forwarder
         trDataPoint = docTracerDatapoint DatapointBackend
@@ -340,6 +340,12 @@ docTracers configFileName outputFileName _ _ _ = do
                                 remotePeer
                                 (BlockFetch.TraceFetchClientState (Header blk))))
 
+    clientMetricsDoc <- documentTracer trConfig blockFetchClientTr
+      (docBlockFetchClientMetrics :: Documented (BlockFetch.TraceLabelPeer
+                                remotePeer
+                                (BlockFetch.TraceFetchClientState (Header blk))))
+
+
     blockFetchServerTr  <- mkCardanoTracer
                 trBase trForward mbTrEKG
                 ["BlockFetch", "Server"]
@@ -417,22 +423,19 @@ docTracers configFileName outputFileName _ _ _ = do
                 mkCardanoTracer'
                 trBase trForward mbTrEKG
                 ["Forge", "Stats"]
-                namesForForge
-                severityForge
+                namesForForge2
+                severityForge2
                 allPublic
                 forgeThreadStats
 
     configureTracers trConfig docForge [forgeTr, forgeThreadStatsTr]
     forgeTrDoc <- documentTracer trConfig forgeTr
-      (docForge :: Documented
-        (Either (Consensus.TraceForgeEvent blk)
-                TraceStartLeadershipCheckPlus))
+      (docForge :: Documented (Either (Consensus.TraceForgeEvent blk)
+                               TraceStartLeadershipCheckPlus))
 
     forgeThreadStatsTrDoc <- documentTracer trConfig forgeThreadStatsTr
-      (docForgeStats :: Documented
-        (Either
-           (Consensus.TraceForgeEvent blk)
-           TraceStartLeadershipCheckPlus))
+      (docForgeStats :: Documented (Either (Consensus.TraceForgeEvent blk)
+                               TraceStartLeadershipCheckPlus))
 
     blockchainTimeTr   <- mkCardanoTracer
                 trBase trForward mbTrEKG
@@ -628,7 +631,7 @@ docTracers configFileName outputFileName _ _ _ = do
     configureTracers trConfig docDiffusionInit [dtDiffusionInitializationTr]
     dtDiffusionInitializationTrDoc <- documentTracer trConfig dtDiffusionInitializationTr
       (docDiffusionInit ::
-        Documented (Diffusion.InitializationTracer Socket.SockAddr LocalAddress))
+        Documented (Diffusion.DiffusionTracer Socket.SockAddr LocalAddress))
 
     dtLedgerPeersTr  <- mkCardanoTracer
                 trBase trForward mbTrEKG
@@ -711,7 +714,7 @@ docTracers configFileName outputFileName _ _ _ = do
     configureTracers trConfig docPeerSelectionActions [peerSelectionActionsTr]
     peerSelectionActionsTrDoc <- documentTracer trConfig peerSelectionActionsTr
       (docPeerSelectionActions ::
-        Documented (PeerSelectionActionsTrace Socket.SockAddr))
+        Documented (PeerSelectionActionsTrace Socket.SockAddr LocalAddress))
 
     connectionManagerTr  <-  mkCardanoTracer
       trBase trForward mbTrEKG
@@ -885,6 +888,7 @@ docTracers configFileName outputFileName _ _ _ = do
             <> chainSyncServerBlockTrDoc
             <> blockFetchDecisionTrDoc
             <> blockFetchClientTrDoc
+            <> clientMetricsDoc
             <> blockFetchServerTrDoc
             <> forgeKESInfoTrDoc
             <> txInboundTrDoc

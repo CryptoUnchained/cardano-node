@@ -36,7 +36,7 @@ import           Codec.CBOR.Read (DeserialiseFailure)
 import           Data.Aeson (ToJSON (..), Value (..))
 import           Data.IntPSQ (IntPSQ)
 import qualified Data.IntPSQ as Pq
-import qualified Data.Map.Strict as SMap
+import qualified Data.Map.Strict as Map
 import qualified Data.Text as Text
 import           Data.Time (NominalDiffTime, UTCTime)
 import qualified System.Metrics.Counter as Counter
@@ -79,8 +79,8 @@ import qualified Ouroboros.Consensus.Protocol.Ledger.HotKey as HotKey
 import           Ouroboros.Consensus.Util.Enclose
 
 import qualified Ouroboros.Network.AnchoredFragment as AF
-import           Ouroboros.Network.Block (BlockNo (..), ChainUpdate (..),
-                   HasHeader (..), Point, StandardHash, blockNo, pointSlot, unBlockNo)
+import           Ouroboros.Network.Block (BlockNo (..), ChainUpdate (..), HasHeader (..), Point,
+                   StandardHash, blockNo, pointSlot, unBlockNo)
 import           Ouroboros.Network.BlockFetch.ClientState (TraceFetchClientState (..),
                    TraceLabelPeer (..))
 import           Ouroboros.Network.BlockFetch.Decision (FetchDecision, FetchDecline (..))
@@ -346,7 +346,7 @@ mkTracers blockConfig tOpts@(TracingOnLegacy trSel) tr nodeKern ekgDirect enable
      , Diffusion.dtHandshakeTracer               = handshakeTracer
      , Diffusion.dtLocalMuxTracer                = localMuxTracer
      , Diffusion.dtLocalHandshakeTracer          = localHandshakeTracer
-     , Diffusion.dtDiffusionInitializationTracer = initializationTracer
+     , Diffusion.dtDiffusionTracer               = initializationTracer
      , Diffusion.dtLedgerPeersTracer             = ledgerPeersTracer
      }
    diffusionTracersExtra' enP2P =
@@ -456,6 +456,7 @@ mkTracers _ _ _ _ _ enableP2P =
       , Consensus.mempoolTracer = nullTracer
       , Consensus.forgeTracer = nullTracer
       , Consensus.blockchainTimeTracer = nullTracer
+      , Consensus.consensusStartupErrorTracer = nullTracer
       }
     , nodeToClientTracers = NodeToClient.Tracers
       { NodeToClient.tChainSyncTracer = nullTracer
@@ -579,38 +580,38 @@ traceI tr meta msg i = traceNamedObject tr (meta, LogValue msg (PureI (fromInteg
 sendEKGDirectCounter :: EKGDirect -> Text -> IO ()
 sendEKGDirectCounter ekgDirect name = do
   modifyMVar_ (ekgCounters ekgDirect) $ \registeredMap -> do
-    case SMap.lookup name registeredMap of
+    case Map.lookup name registeredMap of
       Just counter -> do
         Counter.inc counter
         pure registeredMap
       Nothing -> do
         counter <- EKG.getCounter name (ekgServer ekgDirect)
         Counter.inc counter
-        pure $ SMap.insert name counter registeredMap
+        pure $ Map.insert name counter registeredMap
 
 sendEKGDirectInt :: Integral a => EKGDirect -> Text -> a -> IO ()
 sendEKGDirectInt ekgDirect name val = do
   modifyMVar_ (ekgGauges ekgDirect) $ \registeredMap -> do
-    case SMap.lookup name registeredMap of
+    case Map.lookup name registeredMap of
       Just gauge -> do
         Gauge.set gauge (fromIntegral val)
         pure registeredMap
       Nothing -> do
         gauge <- EKG.getGauge name (ekgServer ekgDirect)
         Gauge.set gauge (fromIntegral val)
-        pure $ SMap.insert name gauge registeredMap
+        pure $ Map.insert name gauge registeredMap
 
 sendEKGDirectDouble :: EKGDirect -> Text -> Double -> IO ()
 sendEKGDirectDouble ekgDirect name val = do
   modifyMVar_ (ekgLabels ekgDirect) $ \registeredMap -> do
-    case SMap.lookup name registeredMap of
+    case Map.lookup name registeredMap of
       Just label -> do
         Label.set label (Text.pack (show val))
         pure registeredMap
       Nothing -> do
         label <- EKG.getLabel name (ekgServer ekgDirect)
         Label.set label (Text.pack (show val))
-        pure $ SMap.insert name label registeredMap
+        pure $ Map.insert name label registeredMap
 
 --------------------------------------------------------------------------------
 -- Consensus Tracers
@@ -680,7 +681,7 @@ mkConsensusTracers mbEKGDirect trSel verb tr nodeKern fStats = do
         tLocalUp tMaxSlotNo $ tracerOnOff (traceBlockFetchServer trSel) verb "BlockFetchServer" tr
     , Consensus.keepAliveClientTracer = tracerOnOff (traceKeepAliveClient trSel) verb "KeepAliveClient" tr
     , Consensus.forgeStateInfoTracer = tracerOnOff' (traceForgeStateInfo trSel) $
-        forgeStateInfoTracer (Proxy @ blk) trSel tr
+        forgeStateInfoTracer (Proxy @blk) trSel tr
     , Consensus.txInboundTracer = tracerOnOff' (traceTxInbound trSel) $
         Tracer $ \ev -> do
           traceWith (annotateSeverity . toLogObject' verb $ appendName "TxInbound" tr) ev
@@ -711,6 +712,8 @@ mkConsensusTracers mbEKGDirect trSel verb tr nodeKern fStats = do
     , Consensus.blockchainTimeTracer = tracerOnOff' (traceBlockchainTime trSel) $
         Tracer $ \ev ->
           traceWith (toLogObject tr) (readableTraceBlockchainTimeEvent ev)
+    , Consensus.consensusStartupErrorTracer =
+        Tracer $ \err -> traceWith (toLogObject tr) (ConsensusStartupException err)
     }
  where
    mkForgeTracers :: IO ForgeTracers
@@ -1423,7 +1426,7 @@ tracePeerSelectionCountersMetrics (OnOff False) _                = nullTracer
 tracePeerSelectionCountersMetrics (OnOff True)  (Just ekgDirect) = pscTracer
   where
     pscTracer :: Tracer IO PeerSelectionCounters
-    pscTracer = Tracer $ \(PeerSelectionCounters cold warm hot) -> do
+    pscTracer = Tracer $ \(PeerSelectionCounters cold warm hot _) -> do
       sendEKGDirectInt ekgDirect "cardano.node.metrics.peerSelection.cold" cold
       sendEKGDirectInt ekgDirect "cardano.node.metrics.peerSelection.warm" warm
       sendEKGDirectInt ekgDirect "cardano.node.metrics.peerSelection.hot"  hot
